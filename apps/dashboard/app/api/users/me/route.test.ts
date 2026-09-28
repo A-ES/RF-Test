@@ -43,6 +43,7 @@ import { GET, PATCH } from "./route";
 
 function session(): Session {
   return {
+          mode: "CLIENT",
     userId: "usr_a",
     organizationId: "org_a",
     name: "Jordan Ellis",

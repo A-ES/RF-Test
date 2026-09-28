@@ -277,11 +277,11 @@ import { POST as addTask } from "./[id]/tasks/route";
 import { PATCH as updateTask, DELETE as deleteTask } from "./[id]/tasks/[taskId]/route";
 
 function sessionOrgA(): Session {
-  return { userId: "usr_user1", organizationId: "org_a", name: "Jordan Ellis", email: "jordan@acme.com", role: "ADMIN" };
+  return { mode: "CLIENT", userId: "usr_user1", organizationId: "org_a", name: "Jordan Ellis", email: "jordan@acme.com", role: "ADMIN" };
 }
 
 function sessionOrgB(): Session {
-  return { userId: "usr_other", organizationId: "org_b", name: "Other User", email: "other@orgb.com", role: "MEMBER" };
+  return { mode: "CLIENT", userId: "usr_other", organizationId: "org_b", name: "Other User", email: "other@orgb.com", role: "MEMBER" };
 }
 
 describe("Projects & Subtasks API", () => {

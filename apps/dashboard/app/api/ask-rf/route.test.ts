@@ -237,6 +237,7 @@ const QUESTION = "Which accounts are most at risk this quarter?";
 
 function sessionFor(userId: string, organizationId: string): Session {
   return {
+          mode: "CLIENT",
     userId,
     organizationId,
     name: userId,

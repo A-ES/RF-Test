@@ -58,6 +58,7 @@ beforeAll(() => {
 
 function sessionFor(organizationId: string): Session {
   return {
+          mode: "CLIENT",
     userId: "usr_a",
     organizationId,
     name: "Test",

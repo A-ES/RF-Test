@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 
 const dbUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
@@ -1009,6 +1010,379 @@ async function main() {
     }
   }
   console.log(`✓ Created ${seedItems.length} RF & Electronics inventory items across 8 categories with initial stock and movements`);
+
+  // 9. RF Admin Console Identity (top-level, intentionally not tenant-scoped)
+  //
+  // Upsert rather than create: RfAdminUser sits outside every Organization, so
+  // the `organization.deleteMany` in step 0 does not cascade to it and a plain
+  // create would fail on the second run.
+  //
+  // The password uses the same unsalted SHA-256 as the client login route,
+  // because no password-hashing library is installed in this repository. The RF
+  // admin login route has no demo-password fallback, so a real hash is required.
+  const rfAdminPasswordHash = createHash("sha256")
+    .update(process.env.AUTH_DEMO_PASSWORD ?? "password")
+    .digest("hex");
+
+  const rfConsoleAdmin = await prisma.rfAdminUser.upsert({
+    where: { email: "admin@rf-intelligence.com" },
+    update: {
+      name: "RF Console Admin",
+      passwordHash: rfAdminPasswordHash,
+      isActive: true,
+    },
+    create: {
+      id: "rfa_console_admin",
+      name: "RF Console Admin",
+      email: "admin@rf-intelligence.com",
+      passwordHash: rfAdminPasswordHash,
+    },
+  });
+
+  // A deactivated console account, so the `isActive` gate in getRfAdminSession
+  // has something to reject.
+  await prisma.rfAdminUser.upsert({
+    where: { email: "suspended@rf-intelligence.com" },
+    update: {},
+    create: {
+      id: "rfa_suspended",
+      name: "Suspended RF Console User",
+      email: "suspended@rf-intelligence.com",
+      passwordHash: rfAdminPasswordHash,
+      isActive: false,
+    },
+  });
+  console.log(
+    `✓ RF Admin console identity seeded: ${rfConsoleAdmin.email} (sign in via POST /api/auth/rf-admin/login)`,
+  );
+
+  // 10. Create Customer Conversations (Part 1)
+  const daysAgo = (d: number) => minutesAgo(d * 24 * 60);
+
+  const acmeCustomer = await prisma.customer.create({
+    data: {
+      id: "cus_acme_vance",
+      organizationId: org.id,
+      name: "Robert Vance",
+      company: "Acme Corp",
+      email: "r.vance@acmecorp.com",
+      phone: "+1 415 555 0142",
+      whatsapp: "+14155550142",
+      status: "ACTIVE",
+      tagsJson: JSON.stringify(["vip", "wholesale", "renewal-q3"]),
+      internalNotes:
+        "Prefers WhatsApp. Always confirm dispatch dates by SMS as well. Renewal decision sits with the VP of Operations.",
+      orderReference: "SO-ACME-2026-0417 / PO-88213",
+      assignedEmployeeId: priya.id,
+      lastInteractionAt: minutesAgo(4),
+    },
+  });
+
+  const meridianCustomer = await prisma.customer.create({
+    data: {
+      id: "cus_meridian_chen",
+      organizationId: org.id,
+      name: "Sarah Chen",
+      company: "Meridian Health",
+      email: "s.chen@meridianhealth.org",
+      phone: "+1 617 555 0198",
+      whatsapp: null,
+      status: "AT_RISK",
+      tagsJson: JSON.stringify(["enterprise", "at-risk", "qbr-due"]),
+      internalNotes:
+        "Two missed shipments in June. Escalate anything touching lead times to the account director before replying.",
+      orderReference: "SO-MER-2026-0093",
+      assignedEmployeeId: priya.id,
+      lastInteractionAt: minutesAgo(37),
+    },
+  });
+
+  const northstarCustomer = await prisma.customer.create({
+    data: {
+      id: "cus_northstar_miller",
+      organizationId: org.id,
+      name: "David Miller",
+      company: "Northstar Labs",
+      email: "d.miller@northstarlabs.io",
+      phone: "+1 206 555 0175",
+      whatsapp: null,
+      status: "ACTIVE",
+      tagsJson: JSON.stringify(["new", "technical"]),
+      internalNotes:
+        "Evaluating us against two competitors. Send spec sheets ahead of any call.",
+      orderReference: null,
+      assignedEmployeeId: tom.id,
+      lastInteractionAt: minutesAgo(92),
+    },
+  });
+
+  // Deliberately unassigned: shows what a CLIENT_EMPLOYEE must not see, and
+  // gives a CLIENT_ADMIN something they can pick up.
+  const globalfinCustomer = await prisma.customer.create({
+    data: {
+      id: "cus_globalfin_rostova",
+      organizationId: org.id,
+      name: "Elena Rostova",
+      company: "GlobalFin",
+      email: "e.rostova@globalfin.com",
+      phone: "+44 20 7946 0813",
+      whatsapp: "+442079460813",
+      status: "ACTIVE",
+      tagsJson: JSON.stringify(["enterprise", "unassigned"]),
+      internalNotes: "Waiting on an owner — do not reply until assigned.",
+      orderReference: "SO-GLF-2026-0211",
+      assignedEmployeeId: null,
+      lastInteractionAt: minutesAgo(2 * 24 * 60),
+    },
+  });
+  console.log("✓ Demo Customers created (4)");
+
+  await prisma.customerConversation.create({
+    data: {
+      id: "cusconv_vance_dispatch",
+      organizationId: org.id,
+      customerId: acmeCustomer.id,
+      channel: "WHATSAPP",
+      status: "HUMAN_ESCALATION",
+      priority: "HIGH",
+      subject: "Ships arriving with damaged antenna mounts",
+      tagsJson: JSON.stringify(["escalation", "damaged-goods", "logistics"]),
+      assignedEmployeeId: priya.id,
+      escalationReason:
+        "AI flagged a replacement-commitment risk at 0.31 confidence and refused to offer a refund without human sign-off.",
+      lastMessageAt: minutesAgo(4),
+      lastMessagePreview: "Understood — I will get the replacement arranged today.",
+      createdAt: daysAgo(1),
+      messages: {
+        create: [
+          {
+            organizationId: org.id,
+            sender: "CUSTOMER",
+            createdAt: daysAgo(1),
+            body: "Hi — the shipment that landed this morning has two bent antenna mounts. We need the mast brackets before the Thursday site install.",
+          },
+          {
+            organizationId: org.id,
+            sender: "AI",
+            createdAt: daysAgo(1),
+            confidenceScore: 0.44,
+            body: "Sorry to hear that. I can see order SO-ACME-2026-0417 with 2x MNT-MAST-CLAMP flagged as delivered. I have raised this for a human colleague who can arrange a replacement and will come back to you shortly.",
+          },
+          {
+            organizationId: org.id,
+            sender: "EMPLOYEE",
+            createdAt: minutesAgo(52),
+            body: "Hi Robert, this is Priya from RF Intelligence. I can get replacement clamps out on next-day dispatch — confirming the delivery address is still the Sacramento warehouse?",
+          },
+          {
+            organizationId: org.id,
+            sender: "CUSTOMER",
+            createdAt: minutesAgo(11),
+            body: "Yes, same address. Thursday is very tight for us, so anything you can do helps.",
+          },
+          {
+            organizationId: org.id,
+            sender: "EMPLOYEE",
+            createdAt: minutesAgo(4),
+            body: "Understood — I will get the replacement arranged today.",
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.customerConversation.create({
+    data: {
+      id: "cusconv_chen_leadtime",
+      organizationId: org.id,
+      customerId: meridianCustomer.id,
+      channel: "EMAIL",
+      status: "AI_HANDLING",
+      priority: "NORMAL",
+      subject: "Lead time on the enclosure order",
+      tagsJson: JSON.stringify(["lead-time", "qbr"]),
+      assignedEmployeeId: priya.id,
+      lastMessageAt: minutesAgo(37),
+      lastMessagePreview: "Our standard lead time on the IP67 enclosures is 5-7 working days.",
+      createdAt: daysAgo(2),
+      messages: {
+        create: [
+          {
+            organizationId: org.id,
+            sender: "CUSTOMER",
+            createdAt: daysAgo(2),
+            body: "Following up on the ENC-IP67-ALUM order. Our clinical rollout slipped a week, so we need a firm date. Can you also confirm the price is still the same?",
+          },
+          {
+            organizationId: org.id,
+            sender: "AI",
+            createdAt: minutesAgo(37),
+            confidenceScore: 0.91,
+            body: "Hi Sarah, our standard lead time on the IP67 enclosures is 5-7 working days, and the unit price is unchanged at 52.00. Your order is currently allocated against the Melbourne hub with stock available. I have flagged the date question for your account team in case a partial shipment would help.",
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.customerConversation.create({
+    data: {
+      id: "cusconv_miller_specs",
+      organizationId: org.id,
+      customerId: northstarCustomer.id,
+      channel: "WEB_CHAT",
+      status: "WAITING_FOR_CUSTOMER",
+      priority: "NORMAL",
+      subject: "Technical specs for the DIN rail kit",
+      tagsJson: JSON.stringify(["technical", "new-business"]),
+      assignedEmployeeId: tom.id,
+      lastMessageAt: minutesAgo(92),
+      lastMessagePreview: "Does the MNT-DIN-KIT work with 35mm top-hat only?",
+      createdAt: daysAgo(3),
+      messages: {
+        create: [
+          {
+            organizationId: org.id,
+            sender: "CUSTOMER",
+            createdAt: daysAgo(3),
+            body: "Hi — we are evaluating for a new lab build. Can you send the full spec sheet for the MNT-DIN-KIT and the vent plug?",
+          },
+          {
+            organizationId: org.id,
+            sender: "AI",
+            createdAt: daysAgo(3),
+            confidenceScore: 0.88,
+            body: "Of course. The MNT-DIN-KIT is a pack of 10 quick-release spring-loaded 35mm top-hat brackets, and the ENC-VENT-PLUG is an M12 hydrophobic PTFE breather for the IP67 enclosures. I have attached both spec sheets.",
+          },
+          {
+            organizationId: org.id,
+            sender: "CUSTOMER",
+            createdAt: minutesAgo(92),
+            body: "Thanks. Does the MNT-DIN-KIT work with 35mm top-hat only? Our existing rails are 35mm but I want to be sure before we size the order.",
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.customerConversation.create({
+    data: {
+      id: "cusconv_rostova_payment",
+      organizationId: org.id,
+      customerId: globalfinCustomer.id,
+      channel: "SMS",
+      status: "WAITING_FOR_CLIENT",
+      priority: "URGENT",
+      subject: "Purchase order reference needed for SO-GLF-2026-0211",
+      tagsJson: JSON.stringify(["unassigned", "urgent", "billing"]),
+      assignedEmployeeId: null,
+      lastMessageAt: minutesAgo(2 * 24 * 60),
+      lastMessagePreview: "Could you send the PO number so we can match it to the invoice?",
+      createdAt: daysAgo(4),
+      messages: {
+        create: [
+          {
+            organizationId: org.id,
+            sender: "CUSTOMER",
+            createdAt: daysAgo(4),
+            body: "Our finance team cannot match the invoice to a purchase order. Could you send the PO number so we can release payment?",
+          },
+          {
+            organizationId: org.id,
+            sender: "AI",
+            createdAt: minutesAgo(2 * 24 * 60),
+            confidenceScore: 0.19,
+            body: "I have not been able to confirm the PO number from our records and do not want to guess on an invoice. I am routing this to a human colleague who can pull the original purchase order and come back to you.",
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.customerConversation.create({
+    data: {
+      id: "cusconv_meridian_resolved",
+      organizationId: org.id,
+      customerId: meridianCustomer.id,
+      channel: "WEB_CHAT",
+      status: "RESOLVED",
+      priority: "LOW",
+      subject: "Add a second delivery address to the account",
+      tagsJson: JSON.stringify(["account-admin", "closed"]),
+      assignedEmployeeId: marcus.id,
+      resolvedAt: daysAgo(5),
+      closedAt: daysAgo(5),
+      lastMessageAt: daysAgo(5),
+      lastMessagePreview: "That is all set — the second address is now on the account.",
+      createdAt: daysAgo(6),
+      messages: {
+        create: [
+          {
+            organizationId: org.id,
+            sender: "CUSTOMER",
+            createdAt: daysAgo(6),
+            body: "Can you add our Cambridge clinic as a second delivery address on the account?",
+          },
+          {
+            organizationId: org.id,
+            sender: "AI",
+            createdAt: daysAgo(6),
+            confidenceScore: 0.83,
+            body: "I have sent this to your account team to add the Cambridge clinic as a second delivery address. They will confirm once it is live.",
+          },
+          {
+            organizationId: org.id,
+            sender: "EMPLOYEE",
+            createdAt: daysAgo(5),
+            body: "That is all set — the second address is now on the account.",
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.customerConversation.create({
+    data: {
+      id: "cusconv_acme_closed",
+      organizationId: org.id,
+      customerId: acmeCustomer.id,
+      channel: "EMAIL",
+      status: "CLOSED",
+      priority: "LOW",
+      subject: "Warranty claim on the armored patch cables",
+      tagsJson: JSON.stringify(["warranty", "closed"]),
+      assignedEmployeeId: marcus.id,
+      resolvedAt: daysAgo(9),
+      closedAt: daysAgo(8),
+      lastMessageAt: daysAgo(8),
+      lastMessagePreview: "Replacement cables shipped, tracking shared. Closing this one out.",
+      createdAt: daysAgo(10),
+      messages: {
+        create: [
+          {
+            organizationId: org.id,
+            sender: "CUSTOMER",
+            createdAt: daysAgo(10),
+            body: "Two of the armored patch cables from the March order are intermittent. Can we claim these under warranty?",
+          },
+          {
+            organizationId: org.id,
+            sender: "AI",
+            createdAt: daysAgo(10),
+            confidenceScore: 0.72,
+            body: "That order is within the 24-month warranty window, so this should be covered. I have raised it with a colleague to arrange replacements under warranty.",
+          },
+          {
+            organizationId: org.id,
+            sender: "EMPLOYEE",
+            createdAt: daysAgo(8),
+            body: "Replacement cables shipped, tracking shared. Closing this one out.",
+          },
+        ],
+      },
+    },
+  });
+  console.log("✓ Customer Conversations & Messages created (6 conversations across all 4 channels)");
 
   console.log("🎉 Database seeding completed successfully!");
 }

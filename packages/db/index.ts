@@ -99,6 +99,10 @@ export type {
   Supplier,
   PurchaseOrder,
   PurchaseOrderItem,
+  Customer,
+  CustomerConversation,
+  CustomerMessage,
+  RfAdminUser,
   PrismaPromise,
 } from "@prisma/client";
 export {
@@ -114,4 +118,9 @@ export {
   InventoryUnit,
   InventoryMovementType,
   PurchaseOrderStatus,
+  CustomerStatus,
+  CustomerConversationChannel,
+  CustomerConversationStatus,
+  CustomerConversationPriority,
+  CustomerMessageSender,
 } from "@prisma/client";

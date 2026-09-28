@@ -57,6 +57,7 @@ import type { Session } from "@/app/lib/session";
 
 function sessionFor(userId: string, organizationId: string): Session {
   return {
+          mode: "CLIENT",
     userId,
     organizationId,
     name: "Test",

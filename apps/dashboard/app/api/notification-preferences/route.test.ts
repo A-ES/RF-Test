@@ -44,7 +44,7 @@ vi.mock("@/app/lib/db", () => ({ prisma: h.prisma }));
 import { GET, PATCH } from "./route";
 
 function session(userId = "usr_a"): Session {
-  return { userId, organizationId: "org_a", name: "Test", email: "test@acme.com", role: "MEMBER" };
+  return { mode: "CLIENT", userId, organizationId: "org_a", name: "Test", email: "test@acme.com", role: "MEMBER" };
 }
 
 function patchRequest(body: unknown): Request {

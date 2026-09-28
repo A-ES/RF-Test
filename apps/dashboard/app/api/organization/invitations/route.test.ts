@@ -71,6 +71,7 @@ import { GET, POST } from "./route";
 
 function adminSession(): Session {
   return {
+          mode: "CLIENT",
     userId: "usr_admin",
     organizationId: "org_a",
     name: "Admin",
@@ -81,6 +82,7 @@ function adminSession(): Session {
 
 function memberSession(): Session {
   return {
+          mode: "CLIENT",
     userId: "usr_member",
     organizationId: "org_a",
     name: "Member",

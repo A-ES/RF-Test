@@ -22,7 +22,7 @@ import { PATCH } from "./route";
 import type { Session } from "@/app/lib/session";
 
 function sessionFor(organizationId: string): Session {
-  return { userId: "usr_a", organizationId, name: "Test", email: "t@example.com", role: "MEMBER" };
+  return { mode: "CLIENT", userId: "usr_a", organizationId, name: "Test", email: "t@example.com", role: "MEMBER" };
 }
 
 function ctx(id: string) {
