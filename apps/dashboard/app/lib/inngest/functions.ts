@@ -1,9 +1,12 @@
 import { processDocument } from "@/app/lib/documents/process";
 import { generateInsightsForOrg } from "@/app/lib/insights/generate";
+import { processCustomerAiReply } from "@/app/lib/messaging/ai-reply";
 import {
+  CUSTOMER_MESSAGE_AI_EVENT,
   DOCUMENT_PROCESS_EVENT,
   INSIGHT_GENERATE_EVENT,
   inngest,
+  type CustomerMessageAiEventData,
   type DocumentProcessEventData,
   type InsightGenerateEventData,
 } from "@/app/lib/inngest/client";
@@ -79,5 +82,23 @@ export const generateInsightsOnDemand = inngest.createFunction(
       );
       return generateInsightsForOrg(organizationId);
     });
+  },
+);
+
+// ─── Customer inbound AI reply ────────────────────────────────────────────────
+//
+// Webhooks return as soon as the message is stored. Model inference happens
+// here so Meta/email retries are not blocked on the LLM.
+
+export const generateCustomerAiReply = inngest.createFunction(
+  {
+    id: "customer-message-ai-reply",
+    retries: 2,
+    triggers: [{ event: CUSTOMER_MESSAGE_AI_EVENT }],
+  },
+  async ({ event, step }) => {
+    const data = event.data as CustomerMessageAiEventData;
+
+    return step.run("draft-reply", () => processCustomerAiReply(data));
   },
 );

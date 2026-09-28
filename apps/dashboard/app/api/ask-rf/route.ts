@@ -225,7 +225,10 @@ export async function POST(request: Request): Promise<Response> {
     ttlMs: 10 * 60 * 1000,
   });
 
-  // Observability logging
+  // Observability & Analytics logging
+  const { trackEvent } = await import("@/app/lib/analytics");
+  trackEvent("ask_rf_query_asked", { category, questionLength: question.length }, { organizationId: orgId, userId });
+
   const totalDuration = Date.now() - startTime;
   console.log(JSON.stringify({
     event: "ask_rf_query",

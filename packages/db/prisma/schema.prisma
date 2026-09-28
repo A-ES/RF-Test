@@ -11,6 +11,12 @@ generator client {
 enum Role {
   ADMIN
   MEMBER
+  // Client Conversations roles.
+  // CLIENT_ADMIN    — sees every customer in their own organization.
+  // CLIENT_EMPLOYEE — sees only the customers assigned to them.
+  // ADMIN/MEMBER are the pre-existing dashboard roles and remain org-wide.
+  CLIENT_ADMIN
+  CLIENT_EMPLOYEE
 }
 
 enum ProjectStatus {
@@ -86,6 +92,12 @@ model Organization {
   inventoryMovements      InventoryMovement[]
   suppliers               Supplier[]
   purchaseOrders          PurchaseOrder[]
+  customers               Customer[]
+  customerConversations   CustomerConversation[]
+  customerMessages        CustomerMessage[]
+  messagingInboxes        MessagingInbox[]
+  settings                OrganizationSettings?
+  subscriptions           Subscription[]
 
   @@map("organizations")
 }
@@ -103,20 +115,23 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  ownedProjects          Project[]               @relation("ProjectOwner")
-  projectActivities      ProjectActivity[]
-  assignedTasks          Task[]                  @relation("TaskAssignee")
-  uploadedDocuments      Document[]
-  createdReports         Report[]
-  sentMessages           Message[]
-  notifications          Notification[]
-  notificationPreference NotificationPreference?
-  askRfQueries           AskRfQuery[]
-  auditLogs              AuditLog[]
-  sentInvitations        Invitation[]
-  inventoryMovements     InventoryMovement[]
+  organization                  Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ownedProjects                 Project[]               @relation("ProjectOwner")
+  projectActivities             ProjectActivity[]
+  assignedTasks                 Task[]                  @relation("TaskAssignee")
+  uploadedDocuments             Document[]
+  createdReports                Report[]
+  sentMessages                  Message[]
+  notifications                 Notification[]
+  notificationPreference        NotificationPreference?
+  askRfQueries                  AskRfQuery[]
+  auditLogs                     AuditLog[]
+  sentInvitations               Invitation[]
+  inventoryMovements            InventoryMovement[]
+  assignedCustomers             Customer[]              @relation("CustomerAssignee")
+  assignedCustomerConversations CustomerConversation[]  @relation("CustomerConversationAssignee")
 
+  @@index([organizationId, role])
   @@map("users")
 }
 
@@ -141,6 +156,9 @@ model Project {
   documents    Document[]
   reports      Report[]
 
+  @@index([organizationId, status])
+  @@index([organizationId, ownerId])
+  @@index([organizationId, dueDate])
   @@map("projects")
 }
 
@@ -159,6 +177,8 @@ model ProjectActivity {
   project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   author       User         @relation(fields: [authorId], references: [id])
 
+  @@index([organizationId, projectId, createdAt])
+  @@index([projectId])
   @@map("project_activities")
 }
 
@@ -190,6 +210,8 @@ model Insight {
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   actions      InsightAction[]
 
+  @@index([organizationId, severity])
+  @@index([organizationId, createdAt])
   @@map("insights")
 }
 
@@ -204,6 +226,7 @@ model InsightAction {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   insight      Insight      @relation(fields: [insightId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId, insightId])
   @@map("insight_actions")
 }
 
@@ -224,6 +247,9 @@ model Task {
   project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
   assignee     User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
 
+  @@index([organizationId, status])
+  @@index([organizationId, assigneeId])
+  @@index([projectId])
   @@map("tasks")
 }
 
@@ -295,6 +321,7 @@ model Conversation {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   messages     Message[]
 
+  @@index([organizationId, updatedAt])
   @@map("conversations")
 }
 
@@ -312,6 +339,7 @@ model Message {
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation(fields: [senderId], references: [id])
 
+  @@index([organizationId, conversationId, createdAt])
   @@map("messages")
 }
 
@@ -322,12 +350,17 @@ model Notification {
   userId         String
   title          String
   body           String
+  type           String   @default("GENERAL")
+  linkHref       String?
+  metadataJson   String?
   read           Boolean  @default(false)
   createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId, userId, read])
+  @@index([createdAt])
   @@map("notifications")
 }
 
@@ -600,3 +633,328 @@ enum PurchaseOrderStatus {
   CANCELLED
 }
 
+// ─── 16. Customer Conversations (Part 1) ────────────────────────────────────────
+
+enum CustomerStatus {
+  LEAD
+  ACTIVE
+  AT_RISK
+  CHURNED
+  INACTIVE
+}
+
+enum CustomerConversationChannel {
+  WHATSAPP
+  EMAIL
+  WEB_CHAT
+  SMS
+}
+
+enum CustomerConversationStatus {
+  OPEN
+  AI_HANDLING
+  WAITING_FOR_CUSTOMER
+  WAITING_FOR_CLIENT
+  HUMAN_ESCALATION
+  RESOLVED
+  CLOSED
+}
+
+enum CustomerConversationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum CustomerMessageSender {
+  CUSTOMER
+  AI
+  EMPLOYEE
+}
+
+model Customer {
+  id                 String         @id @default(cuid())
+  organizationId     String
+  name               String
+  company            String?
+  email              String?
+  phone              String?
+  whatsapp           String?
+  status             CustomerStatus @default(LEAD)
+  tagsJson           String // JSON string array of tags
+  internalNotes      String?
+  orderReference     String? // purchase/order history reference
+  // Visibility: a CLIENT_EMPLOYEE only sees customers assigned to them; a
+  // CLIENT_ADMIN sees every customer in their organization.
+  assignedEmployeeId String?
+  lastInteractionAt  DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  organization     Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedEmployee User?                  @relation("CustomerAssignee", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  conversations    CustomerConversation[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, assignedEmployeeId])
+  @@index([organizationId, lastInteractionAt])
+  @@index([organizationId, email])
+  @@index([organizationId, phone])
+  @@unique([organizationId, whatsapp])
+  @@map("customers")
+}
+
+model CustomerConversation {
+  id                 String                       @id @default(cuid())
+  organizationId     String
+  customerId         String
+  channel            CustomerConversationChannel
+  status             CustomerConversationStatus   @default(OPEN)
+  priority           CustomerConversationPriority @default(NORMAL)
+  subject            String?
+  tagsJson           String // JSON string array of tags
+  assignedEmployeeId String?
+  lastMessageAt      DateTime                     @default(now())
+  lastMessagePreview String?
+  resolvedAt         DateTime?
+  closedAt           DateTime?
+  escalationReason   String?
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignedEmployee User?             @relation("CustomerConversationAssignee", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  messages         CustomerMessage[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, channel])
+  @@index([organizationId, customerId])
+  @@index([organizationId, assignedEmployeeId])
+  @@index([organizationId, lastMessageAt])
+  @@map("customer_conversations")
+}
+
+model CustomerMessage {
+  id              String                @id @default(cuid())
+  organizationId  String
+  conversationId  String
+  sender          CustomerMessageSender
+  body            String
+  // Model confidence for the reply the AI drafted. Non-null only for AI messages.
+  confidenceScore Float?
+  // Provider-issued id (e.g. WhatsApp wamid). Used to ignore webhook retries.
+  providerMessageId String?
+  createdAt       DateTime              @default(now())
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversation CustomerConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, providerMessageId])
+  @@index([conversationId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("customer_messages")
+}
+
+// ─── Messaging inboxes (channel → Organization routing) ───────────────────────
+//
+// Organization resolution for inbound webhooks:
+//   Each tenant that receives customer messages owns one or more inboxes.
+//   WhatsApp: `externalAddress` is Meta's `metadata.phone_number_id` (the
+//   Cloud API id of the business number, not the human-readable E.164).
+//   Email (later): `externalAddress` will be the inbound mailbox, lowercased.
+//   The webhook never trusts a client-supplied organizationId. It looks up
+//   (provider, externalAddress) here and uses the organizationId on that row.
+enum MessagingProviderKind {
+  WHATSAPP
+  EMAIL
+}
+
+model MessagingInbox {
+  id              String                 @id @default(cuid())
+  organizationId  String
+  provider        MessagingProviderKind
+  externalAddress String
+  displayLabel    String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalAddress])
+  @@index([organizationId, provider])
+  @@map("messaging_inboxes")
+}
+
+// ─── RF Admin Console Identity (top-level, deliberately NOT tenant-scoped) ──────
+//
+// This is the RF Intelligence staff identity that signs into the RF Admin console.
+// It is intentionally a separate table from `users` and carries NO organizationId:
+// RF admins span every tenant, so putting them in the tenant RLS scope would be
+// wrong. It is also deliberately NOT reachable by promotion — there is no role
+// flag or boolean anywhere on `User` that can turn a client user into an RF admin.
+// The only way in is `rf_admin_session`, which is minted solely by
+// POST /api/auth/rf-admin/login and is only ever resolved against this table.
+// If you are adding a field here, do not add an `organizationId`.
+model RfAdminUser {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+
+  // ── Multi-factor authentication (TOTP / RFC 6238) ──────────────────────────
+  // A TOTP secret must be recoverable — the server needs it to recompute the
+  // expected code — so unlike a password it cannot be hashed. It is encrypted
+  // at rest with AES-256-GCM under RF_ADMIN_MFA_ENCRYPTION_KEY instead.
+  mfaEnabled          Boolean   @default(false)
+  mfaSecretCiphertext String?
+  mfaEnrolledAt       DateTime?
+
+  // Brute-force and replay defences. `mfaLastUsedStep` records the highest TOTP
+  // time-step already spent, so a code cannot be replayed inside its window.
+  mfaFailedAttempts Int      @default(0)
+  mfaLockedUntil    DateTime?
+  mfaLastUsedStep   Int?
+  lastFailedLoginAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("rf_admin_users")
+}
+
+// ─── 17. Billing ───────────────────────────────────────────────────────────────
+
+enum BillingInterval {
+  MONTHLY
+  ANNUAL
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELED
+}
+
+// A catalog tier. Not tenant-scoped: plans are global and shared by every
+// organization, so there is deliberately no organizationId here.
+model Plan {
+  id            String          @id @default(cuid())
+  slug          String          @unique
+  name          String
+  description   String?
+  priceCents    Int
+  currency      String          @default("USD")
+  interval      BillingInterval @default(MONTHLY)
+  seatLimit     Int?
+  customerLimit Int?
+  featuresJson  String          @default("[]") // JSON string array of feature keys
+  isActive      Boolean         @default(true)
+  sortOrder     Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  subscriptions Subscription[]
+
+  @@index([isActive, sortOrder])
+  @@map("plans")
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  organizationId         String
+  planId                 String
+  status                 SubscriptionStatus @default(TRIALING)
+  seats                  Int                @default(1)
+  currentPeriodStart     DateTime
+  currentPeriodEnd       DateTime
+  trialEndsAt            DateTime?
+  cancelAtPeriodEnd      Boolean            @default(false)
+  canceledAt             DateTime?
+  externalCustomerId     String?
+  externalSubscriptionId String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan         Plan         @relation(fields: [planId], references: [id])
+
+  @@unique([organizationId])
+  @@index([planId])
+  @@index([status, currentPeriodEnd])
+  @@map("subscriptions")
+}
+
+// ─── 18. OrganizationSettings (per-org AI + feature configuration) ─────────────
+//
+// Prompt 3.3 reads the AI model, prompts, and both thresholds from here. It
+// must not hardcode them. The dashboard and the admin console both read this
+// row; only the admin console may write it.
+model OrganizationSettings {
+  id             String @id @default(cuid())
+  organizationId String @unique
+
+  // ── AI model configuration ────────────────────────────────────────────────
+  aiProvider     String  @default("deepseek")
+  aiModel        String  @default("deepseek-chat")
+  aiTemperature  Float   @default(0.2)
+  aiMaxTokens    Int     @default(2048)
+  aiSystemPrompt String  @default("You are a helpful sales operations assistant for RF Intelligence.")
+  // Retrieval grounding: how much retrieved context to include.
+  aiContextWindow Int     @default(6)
+
+  // ── Thresholds (0..1) ─────────────────────────────────────────────────────
+  // AI replies below confidenceThreshold are withheld pending human review.
+  confidenceThreshold Float @default(0.75)
+  // AI replies below escalationThreshold trigger HUMAN_ESCALATION.
+  escalationThreshold Float @default(0.6)
+
+  // ── Behaviour + feature flags ─────────────────────────────────────────────
+  autoReplyEnabled   Boolean @default(true)
+  featureFlagsJson   String  @default("{}") // JSON object of boolean feature flags
+  dataRetentionDays  Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_settings")
+}
+
+// ─── 19. AdminAuditLog (RF Admin console, deliberately NOT tenant-scoped) ──────
+//
+// Cross-tenant by nature: it records what RF staff did, which may span or
+// predate any particular organization. `organizationId` is therefore a plain
+// string with NO foreign key, so the audit trail survives tenant deletion —
+// a cascade here would let a deleted org erase the record of who touched it.
+model AdminAuditLog {
+  id      String  @id @default(cuid())
+  adminId String? // null when the action had no resolvable admin (e.g. a failed login for an unknown email)
+  action         String
+  entityType     String
+  entityId       String?
+  organizationId String? // affected tenant, when the action was tenant-scoped
+  targetEmail    String? // for actions taken against a specific person
+  metadataJson   String?
+  ipAddress      String?
+  userAgent      String?
+  succeeded      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  // Deliberately NO foreign key to RfAdminUser, for the same reason as
+  // organizationId above: a failed login against an unknown email must still be
+  // recordable (adminId is then null), and an audit row must not be cascaded away
+  // when the staff account behind it is deleted. The console credential can only
+  // INSERT here, so there is no referential-integrity requirement to satisfy.
+  @@index([adminId, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+  @@map("admin_audit_logs")
+}

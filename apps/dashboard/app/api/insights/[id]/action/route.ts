@@ -148,5 +148,12 @@ export async function POST(
   const { notifyOrgDataChanged } = await import("@/app/lib/data-sync");
   await notifyOrgDataChanged(session.organizationId, ["insights", "alerts"]);
 
+  const { trackEvent } = await import("@/app/lib/analytics");
+  if (typedAction === "ACCEPTED") {
+    trackEvent("insight_accepted", { insightId, title: insight.title }, { organizationId: session.organizationId, userId: session.userId });
+  } else if (typedAction === "DISMISSED") {
+    trackEvent("insight_dismissed", { insightId, title: insight.title }, { organizationId: session.organizationId, userId: session.userId });
+  }
+
   return Response.json({ insight: updated });
 }

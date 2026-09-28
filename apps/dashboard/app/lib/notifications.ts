@@ -1,13 +1,15 @@
 import { prisma } from "@/app/lib/db";
 import { sendEmail } from "@/app/lib/email";
+import { publishToChannel } from "@/app/lib/realtime/server";
+import { orgChannel, REALTIME_EVENTS } from "@/app/lib/realtime/channels";
 
 /**
- * Preference-aware notification delivery.
+ * Preference-aware notification delivery across all system events.
  *
  * In-app notifications are written to the `Notification` model in a single
- * batched insert and emails are only dispatched when the recipient's
- * `NotificationPreference` allows the relevant category. A missing preference
- * row falls back to the model defaults (in-app + email enabled).
+ * batched insert, published in real-time over Ably to org recipients, and
+ * emails are dispatched when the recipient's `NotificationPreference` allows
+ * the relevant category.
  */
 
 export type NotificationCategory =
@@ -15,12 +17,27 @@ export type NotificationCategory =
   | "riskSignals"
   | "weeklyDigest";
 
+export type NotificationType =
+  | "NEW_CUSTOMER_MESSAGE"
+  | "AI_RESPONSE_SENT"
+  | "HUMAN_ESCALATION"
+  | "NEW_CUSTOMER"
+  | "HIGH_PRIORITY_ISSUE"
+  | "FAILED_JOB"
+  | "INTERNAL_MESSAGE"
+  | "INSIGHT_ALERT"
+  | "REPORT_READY"
+  | "GENERAL";
+
 export interface DeliverNotificationInput {
   organizationId: string;
   recipientIds: string[];
   title: string;
   body: string;
+  type?: NotificationType;
   category?: NotificationCategory;
+  linkHref?: string;
+  metadataJson?: string;
 }
 
 export interface DeliveredNotification {
@@ -52,6 +69,7 @@ export async function deliverNotifications(
   if (recipients.length === 0) return [];
 
   const category = input.category ?? "emailAlerts";
+  const type = input.type ?? "GENERAL";
 
   const [preferences, users] = await Promise.all([
     prisma.notificationPreference.findMany({
@@ -72,6 +90,9 @@ export async function deliverNotifications(
     userId: string;
     title: string;
     body: string;
+    type: string;
+    linkHref?: string | null;
+    metadataJson?: string | null;
   }> = [];
   const emailTargets: Array<{ id: string; email: string }> = [];
 
@@ -84,6 +105,9 @@ export async function deliverNotifications(
         userId: user.id,
         title: input.title,
         body: input.body,
+        type,
+        linkHref: input.linkHref ?? null,
+        metadataJson: input.metadataJson ?? null,
       });
     }
 
@@ -94,6 +118,21 @@ export async function deliverNotifications(
 
   if (inAppRows.length > 0) {
     await prisma.notification.createMany({ data: inAppRows });
+
+    // Real-time broadcast for immediate badge update and toast alert
+    await publishToChannel(
+      orgChannel(input.organizationId, "notifications"),
+      REALTIME_EVENTS.notificationCreated,
+      {
+        organizationId: input.organizationId,
+        recipientIds: inAppRows.map((r) => r.userId),
+        title: input.title,
+        body: input.body,
+        type,
+        linkHref: input.linkHref ?? null,
+        createdAt: new Date().toISOString(),
+      },
+    );
   }
 
   const emailed = await Promise.all(

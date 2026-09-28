@@ -48,10 +48,10 @@ vi.mock("@/app/lib/db", () => ({ prisma: h.prisma }));
 import { PATCH, DELETE } from "./route";
 
 function adminSession(userId = "usr_admin1"): Session {
-  return { userId, organizationId: "org_a", name: "Admin", email: "admin1@acme.com", role: "ADMIN" };
+  return { mode: "CLIENT", userId, organizationId: "org_a", name: "Admin", email: "admin1@acme.com", role: "ADMIN" };
 }
 function memberSession(): Session {
-  return { userId: "usr_member", organizationId: "org_a", name: "Member", email: "member@acme.com", role: "MEMBER" };
+  return { mode: "CLIENT", userId: "usr_member", organizationId: "org_a", name: "Member", email: "member@acme.com", role: "MEMBER" };
 }
 
 type Params = { params: Promise<{ id: string }> };

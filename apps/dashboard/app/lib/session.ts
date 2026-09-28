@@ -6,6 +6,14 @@ export const SESSION_COOKIE = "rf_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 export interface Session {
+  /**
+   * Discriminates this session from an RF Admin console session. Always
+   * "CLIENT" for sessions produced by `getSession`. RF Admin sessions live in
+   * the separate `apps/admin` app, are signed with a different key, and carry
+   * `mode: "RF_ADMIN"`; no code in this app can produce one. Never widen this
+   * to a bare string.
+   */
+  mode: "CLIENT";
   userId: string;
   organizationId: string;
   name: string;
@@ -96,6 +104,10 @@ export function verifySessionToken(
  * Resolves the current session from the signed, httpOnly cookie.
  * Validates the cookie first, checks in-memory cache (45s), and shares in-flight promises
  * so concurrent requests for the same session share one DB call without thundering herd.
+ *
+ * Reads `SESSION_COOKIE` only. It never reads `RF_ADMIN_SESSION_COOKIE` and never
+ * resolves against `RfAdminUser` — the RF Admin console is a separate app
+ * (`apps/admin`) with its own identity path, signing key and host-only cookie.
  */
 export async function getSession(): Promise<Session | null> {
   const store = await cookies();
@@ -139,6 +151,7 @@ export async function getSession(): Promise<Session | null> {
       if (!user) return null;
 
       const session: Session = {
+        mode: "CLIENT",
         userId: user.id,
         organizationId: user.organizationId,
         name: user.name,

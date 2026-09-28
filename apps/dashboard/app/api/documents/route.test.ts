@@ -140,6 +140,7 @@ beforeAll(() => {
 
 function sessionFor(organizationId: string, userId = "usr_a"): Session {
   return {
+          mode: "CLIENT",
     userId,
     organizationId,
     name: userId,

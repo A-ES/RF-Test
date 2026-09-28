@@ -101,3 +101,69 @@ export async function askDeepSeek(
 
   return content.trim();
 }
+
+export interface DeepSeekJsonRequest {
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  systemPrompt: string;
+  userPrompt: string;
+}
+
+/**
+ * Chat completion that must return a JSON object (DeepSeek json_object mode).
+ */
+export async function completeDeepSeekJson(
+  request: DeepSeekJsonRequest,
+): Promise<Record<string, unknown>> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    throw new DeepSeekConfigError("DEEPSEEK_API_KEY is not configured");
+  }
+
+  const response = await fetch(ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: request.model,
+      messages: [
+        { role: "system", content: request.systemPrompt },
+        { role: "user", content: request.userPrompt },
+      ],
+      temperature: request.temperature,
+      max_tokens: request.maxTokens,
+      stream: false,
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new DeepSeekRequestError(
+      `DeepSeek API responded with ${response.status}: ${detail.slice(0, 500)}`,
+    );
+  }
+
+  const data = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const raw = data.choices?.[0]?.message?.content?.trim() ?? "";
+  if (!raw) {
+    throw new DeepSeekRequestError("DeepSeek returned an empty response");
+  }
+
+  const clean = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(clean);
+  } catch {
+    throw new DeepSeekRequestError(`DeepSeek returned non-JSON: ${clean.slice(0, 200)}`);
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new DeepSeekRequestError("DeepSeek JSON was not an object");
+  }
+  return parsed as Record<string, unknown>;
+}
