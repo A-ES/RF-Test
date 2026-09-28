@@ -1,0 +1,7 @@
+{
+  "buildCommand": "cd ../.. && pnpm --filter @rf-intelligence/db db:generate && pnpm --filter @rf-intelligence/admin build",
+  "devCommand": "pnpm dev",
+  "installCommand": "cd ../.. && pnpm install",
+  "framework": "nextjs",
+  "outputDirectory": ".next"
+}

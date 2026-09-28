@@ -1,10 +1,33 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, scrypt } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 
 const dbUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
 const prisma = new PrismaClient({
   datasources: dbUrl ? { db: { url: dbUrl } } : undefined,
 });
+
+/**
+ * Mirrors `hashPassword` in apps/admin/lib/password.ts.
+ *
+ * Duplicated rather than imported because apps/admin depends on this package,
+ * not the other way round — importing up the dependency graph would invert the
+ * layering. The format string below is a contract between this seeder and the
+ * admin app's `verifyPassword`; if the app's parameters change, change them here
+ * too. (A legacy bare-SHA-256 digest is still accepted by the app, so this is
+ * the only thing that must stay in sync.)
+ */
+async function scryptHash(password: string): Promise<string> {
+  const N = 16384;
+  const r = 8;
+  const p = 1;
+  const salt = randomBytes(16);
+  const derived = await new Promise<Buffer>((resolve, reject) => {
+    scrypt(password.normalize("NFKC"), salt, 32, { N, r, p }, (err, key) =>
+      err ? reject(err) : resolve(key),
+    );
+  });
+  return ["scrypt", N, r, p, salt.toString("base64"), derived.toString("base64")].join("$");
+}
 
 async function main() {
   console.log("🌱 Starting Database Seed with Part 1 Demo Data...");
@@ -1017,12 +1040,18 @@ async function main() {
   // the `organization.deleteMany` in step 0 does not cascade to it and a plain
   // create would fail on the second run.
   //
-  // The password uses the same unsalted SHA-256 as the client login route,
-  // because no password-hashing library is installed in this repository. The RF
-  // admin login route has no demo-password fallback, so a real hash is required.
-  const rfAdminPasswordHash = createHash("sha256")
-    .update(process.env.AUTH_DEMO_PASSWORD ?? "password")
-    .digest("hex");
+  // Exactly one RF admin is seeded, per the admin-foundation spec. The console
+  // has no signup path, so additional operators are provisioned by running
+  //   pnpm --filter @rf-intelligence/admin admin:create
+  // which also enrols their authenticator. See docs/ADMIN_APP.md.
+  //
+  // The password is scrypt-hashed to match apps/admin's `verifyPassword`. The
+  // old bare SHA-256 digest is still accepted (and transparently upgraded on
+  // first successful sign-in), so an existing row keeps working.
+  const rfAdminPassword = process.env.RF_ADMIN_SEED_PASSWORD
+    ?? process.env.AUTH_DEMO_PASSWORD
+    ?? "password";
+  const rfAdminPasswordHash = await scryptHash(rfAdminPassword);
 
   const rfConsoleAdmin = await prisma.rfAdminUser.upsert({
     where: { email: "admin@rf-intelligence.com" },
@@ -1039,22 +1068,25 @@ async function main() {
     },
   });
 
-  // A deactivated console account, so the `isActive` gate in getRfAdminSession
-  // has something to reject.
-  await prisma.rfAdminUser.upsert({
-    where: { email: "suspended@rf-intelligence.com" },
-    update: {},
-    create: {
-      id: "rfa_suspended",
-      name: "Suspended RF Console User",
-      email: "suspended@rf-intelligence.com",
-      passwordHash: rfAdminPasswordHash,
-      isActive: false,
-    },
-  });
+  // MFA is deliberately NOT enabled here. Enrolment needs the encryption key
+  // (RF_ADMIN_MFA_ENCRYPTION_KEY) that only the admin app's environment has, so
+  // it happens through `pnpm admin:enrol-mfa` rather than in a shared seed.
   console.log(
-    `✓ RF Admin console identity seeded: ${rfConsoleAdmin.email} (sign in via POST /api/auth/rf-admin/login)`,
+    `✓ RF Admin console identity seeded: ${rfConsoleAdmin.email}\n` +
+      `  Next: pnpm --filter @rf-intelligence/admin admin:enrol-mfa --email ${rfConsoleAdmin.email}`,
   );
+
+  // Remove the deactivated demo admin an earlier revision of this seed created,
+  // so a re-seed converges on the single account the spec calls for. Scoped to
+  // that exact id: this must never remove a real operator account, since the
+  // console has no delete path and this is the only cleanup the seed performs
+  // on RfAdminUser.
+  const { count: removedDemoAdmins } = await prisma.rfAdminUser.deleteMany({
+    where: { id: "rfa_suspended" },
+  });
+  if (removedDemoAdmins > 0) {
+    console.log("✓ Removed legacy demo RF admin 'rfa_suspended'");
+  }
 
   // 10. Create Customer Conversations (Part 1)
   const daysAgo = (d: number) => minutesAgo(d * 24 * 60);
@@ -1383,6 +1415,167 @@ async function main() {
     },
   });
   console.log("✓ Customer Conversations & Messages created (6 conversations across all 4 channels)");
+
+  // 11. Billing plans (global catalogue — no organizationId by design)
+  //
+  // Plans are shared across every tenant, so they are not deleted by the step-0
+  // organization reset. Upsert by slug, which is the stable business key.
+  const planDefinitions = [
+    {
+      slug: "starter",
+      name: "Starter",
+      description: "Single operator. Email support, 500 customers.",
+      priceCents: 9900,
+      seatLimit: 1,
+      customerLimit: 500,
+      featuresJson: JSON.stringify(["email_support", "ai_assistant", "basic_reports"]),
+      sortOrder: 1,
+    },
+    {
+      slug: "growth",
+      name: "Growth",
+      description: "Up to 5 operators. Priority support, 5,000 customers.",
+      priceCents: 29900,
+      seatLimit: 5,
+      customerLimit: 5000,
+      featuresJson: JSON.stringify([
+        "priority_support",
+        "ai_assistant",
+        "advanced_reports",
+        "auto_reply",
+        "whatsapp",
+      ]),
+      sortOrder: 2,
+    },
+    {
+      slug: "enterprise",
+      name: "Enterprise",
+      description: "Unlimited operators. Dedicated support, SSO and audit exports.",
+      priceCents: 99900,
+      seatLimit: null,
+      customerLimit: null,
+      featuresJson: JSON.stringify([
+        "dedicated_support",
+        "ai_assistant",
+        "advanced_reports",
+        "auto_reply",
+        "whatsapp",
+        "sso",
+        "audit_export",
+        "custom_ai_model",
+      ]),
+      sortOrder: 3,
+    },
+  ];
+
+  const plans = new Map<string, { id: string; slug: string }>();
+  for (const plan of planDefinitions) {
+    const row = await prisma.plan.upsert({
+      where: { slug: plan.slug },
+      update: {
+        name: plan.name,
+        description: plan.description,
+        priceCents: plan.priceCents,
+        seatLimit: plan.seatLimit,
+        customerLimit: plan.customerLimit,
+        featuresJson: plan.featuresJson,
+        sortOrder: plan.sortOrder,
+      },
+      create: { id: `plan_${plan.slug}`, ...plan },
+    });
+    plans.set(plan.slug, row);
+  }
+  console.log(`✓ Billing plans seeded (${planDefinitions.length}: ${[...plans.keys()].join(", ")})`);
+
+  // 12. Subscription for the demo tenant
+  //
+  // One subscription per organization (enforced by a unique index on
+  // organizationId), so upserting on organizationId keeps the seed idempotent.
+  const demoPlan = plans.get("growth")!;
+  const periodStart = new Date();
+  const periodEnd = new Date(periodStart);
+  periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+  await prisma.subscription.upsert({
+    where: { organizationId: org.id },
+    update: {
+      planId: demoPlan.id,
+      status: "TRIALING",
+      seats: 3,
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+    },
+    create: {
+      id: "sub_acme_growth",
+      organizationId: org.id,
+      planId: demoPlan.id,
+      status: "TRIALING",
+      seats: 3,
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      trialEndsAt: new Date(periodStart.getTime() + 14 * 24 * 60 * 60 * 1000),
+      externalCustomerId: "cus_demo_acme",
+      externalSubscriptionId: "sub_demo_acme_growth",
+    },
+  });
+  console.log(`✓ Subscription seeded for ${org.name} (Growth, TRIALING)`);
+
+  // 13. Per-organization AI settings
+  //
+  // The AI prompt pipeline (Part 3.3) must read its model, system prompt and
+  // escalation threshold from here rather than hardcoding them, so the demo
+  // tenant gets a row that exercises that path.
+  //
+  // NOTE: confidenceThreshold (0.75) gates whether a drafted reply is shown for
+  // review; escalationThreshold (0.6) is lower, meaning anything the assistant is
+  // less than 60% sure about escalates to a human even though it is above the
+  // review threshold. The ordering is deliberate and is asserted in
+  // apps/admin's settings tests.
+  await prisma.organizationSettings.upsert({
+    where: { organizationId: org.id },
+    update: {
+      aiProvider: "deepseek",
+      aiModel: "deepseek-chat",
+      aiTemperature: 0.2,
+      aiMaxTokens: 2048,
+      aiContextWindow: 6,
+      confidenceThreshold: 0.75,
+      escalationThreshold: 0.6,
+      autoReplyEnabled: true,
+      featureFlagsJson: JSON.stringify({
+        customerConversations: true,
+        autoReply: true,
+        escalationAlerts: true,
+        weeklyDigest: false,
+      }),
+    },
+    create: {
+      id: "orgset_acme",
+      organizationId: org.id,
+      aiProvider: "deepseek",
+      aiModel: "deepseek-chat",
+      aiSystemPrompt:
+        "You are RF Intelligence's sales operations assistant for Acme Corp. " +
+        "Answer using only the supplied conversation context. Quote dispatch and " +
+        "pricing terms back verbatim, never invent lead times, and hand off to a " +
+        "human whenever the customer asks for a discount, a contract change, or " +
+        "anything the context does not cover.",
+      aiTemperature: 0.2,
+      aiMaxTokens: 2048,
+      aiContextWindow: 6,
+      confidenceThreshold: 0.75,
+      escalationThreshold: 0.6,
+      autoReplyEnabled: true,
+      featureFlagsJson: JSON.stringify({
+        customerConversations: true,
+        autoReply: true,
+        escalationAlerts: true,
+        weeklyDigest: false,
+      }),
+      dataRetentionDays: 365,
+    },
+  });
+  console.log(`✓ Organization settings seeded for ${org.name} (AI model + escalation threshold)`);
 
   console.log("🎉 Database seeding completed successfully!");
 }

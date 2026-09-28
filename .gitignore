@@ -40,4 +40,6 @@ next-env.d.ts
 # pnpm
 pnpm-lock.yaml
 .env*
+# Templates hold no secrets and must be committed.
+!.env.example
 .DS_Store

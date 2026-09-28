@@ -95,6 +95,8 @@ model Organization {
   customers               Customer[]
   customerConversations   CustomerConversation[]
   customerMessages        CustomerMessage[]
+  settings                OrganizationSettings?
+  subscriptions           Subscription[]
 
   @@map("organizations")
 }
@@ -747,8 +749,157 @@ model RfAdminUser {
   passwordHash String
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+
+  // ── Multi-factor authentication (TOTP / RFC 6238) ──────────────────────────
+  // A TOTP secret must be recoverable — the server needs it to recompute the
+  // expected code — so unlike a password it cannot be hashed. It is encrypted
+  // at rest with AES-256-GCM under RF_ADMIN_MFA_ENCRYPTION_KEY instead.
+  mfaEnabled          Boolean   @default(false)
+  mfaSecretCiphertext String?
+  mfaEnrolledAt       DateTime?
+
+  // Brute-force and replay defences. `mfaLastUsedStep` records the highest TOTP
+  // time-step already spent, so a code cannot be replayed inside its window.
+  mfaFailedAttempts Int      @default(0)
+  mfaLockedUntil    DateTime?
+  mfaLastUsedStep   Int?
+  lastFailedLoginAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("rf_admin_users")
+}
+
+// ─── 17. Billing ───────────────────────────────────────────────────────────────
+
+enum BillingInterval {
+  MONTHLY
+  ANNUAL
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELED
+}
+
+// A catalog tier. Not tenant-scoped: plans are global and shared by every
+// organization, so there is deliberately no organizationId here.
+model Plan {
+  id            String          @id @default(cuid())
+  slug          String          @unique
+  name          String
+  description   String?
+  priceCents    Int
+  currency      String          @default("USD")
+  interval      BillingInterval @default(MONTHLY)
+  seatLimit     Int?
+  customerLimit Int?
+  featuresJson  String          @default("[]") // JSON string array of feature keys
+  isActive      Boolean         @default(true)
+  sortOrder     Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  subscriptions Subscription[]
+
+  @@index([isActive, sortOrder])
+  @@map("plans")
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  organizationId         String
+  planId                 String
+  status                 SubscriptionStatus @default(TRIALING)
+  seats                  Int                @default(1)
+  currentPeriodStart     DateTime
+  currentPeriodEnd       DateTime
+  trialEndsAt            DateTime?
+  cancelAtPeriodEnd      Boolean            @default(false)
+  canceledAt             DateTime?
+  externalCustomerId     String?
+  externalSubscriptionId String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan         Plan         @relation(fields: [planId], references: [id])
+
+  @@unique([organizationId])
+  @@index([planId])
+  @@index([status, currentPeriodEnd])
+  @@map("subscriptions")
+}
+
+// ─── 18. OrganizationSettings (per-org AI + feature configuration) ─────────────
+//
+// Prompt 3.3 reads the AI model, prompts, and both thresholds from here. It
+// must not hardcode them. The dashboard and the admin console both read this
+// row; only the admin console may write it.
+model OrganizationSettings {
+  id             String @id @default(cuid())
+  organizationId String @unique
+
+  // ── AI model configuration ────────────────────────────────────────────────
+  aiProvider     String  @default("deepseek")
+  aiModel        String  @default("deepseek-chat")
+  aiTemperature  Float   @default(0.2)
+  aiMaxTokens    Int     @default(2048)
+  aiSystemPrompt String  @default("You are a helpful sales operations assistant for RF Intelligence.")
+  // Retrieval grounding: how much retrieved context to include.
+  aiContextWindow Int     @default(6)
+
+  // ── Thresholds (0..1) ─────────────────────────────────────────────────────
+  // AI replies below confidenceThreshold are withheld pending human review.
+  confidenceThreshold Float @default(0.75)
+  // AI replies below escalationThreshold trigger HUMAN_ESCALATION.
+  escalationThreshold Float @default(0.6)
+
+  // ── Behaviour + feature flags ─────────────────────────────────────────────
+  autoReplyEnabled   Boolean @default(true)
+  featureFlagsJson   String  @default("{}") // JSON object of boolean feature flags
+  dataRetentionDays  Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_settings")
+}
+
+// ─── 19. AdminAuditLog (RF Admin console, deliberately NOT tenant-scoped) ──────
+//
+// Cross-tenant by nature: it records what RF staff did, which may span or
+// predate any particular organization. `organizationId` is therefore a plain
+// string with NO foreign key, so the audit trail survives tenant deletion —
+// a cascade here would let a deleted org erase the record of who touched it.
+model AdminAuditLog {
+  id      String  @id @default(cuid())
+  adminId String? // null when the action had no resolvable admin (e.g. a failed login for an unknown email)
+  action         String
+  entityType     String
+  entityId       String?
+  organizationId String? // affected tenant, when the action was tenant-scoped
+  targetEmail    String? // for actions taken against a specific person
+  metadataJson   String?
+  ipAddress      String?
+  userAgent      String?
+  succeeded      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  // Deliberately NO foreign key to RfAdminUser, for the same reason as
+  // organizationId above: a failed login against an unknown email must still be
+  // recordable (adminId is then null), and an audit row must not be cascaded away
+  // when the staff account behind it is deleted. The console credential can only
+  // INSERT here, so there is no referential-integrity requirement to satisfy.
+  @@index([adminId, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+  @@map("admin_audit_logs")
 }

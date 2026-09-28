@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+/*
+ * RF Intelligence — RF Admin console global styles
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Brand tokens come entirely from packages/ui/src/brand.css. This file only
+ * maps them into Tailwind utilities; it redeclares no brand value.
+ *
+ * DO NOT redeclare --red-*, --accent, --background, --surface or anything else
+ * that lives in brand.css — change it there and it propagates to all three apps.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+@import "@rf-intelligence/ui/brand.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans:    'DM Sans', var(--font-geist-sans, system-ui, sans-serif);
+  --font-mono:    'JetBrains Mono', var(--font-geist-mono, ui-monospace, monospace);
+  --font-heading: var(--font-playfair, Georgia, serif);
+
+  --color-background:       var(--background);
+  --color-surface:          var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-text-primary:     var(--text-primary);
+  --color-text-secondary:   var(--text-secondary);
+  --color-text-muted:       var(--text-muted);
+  --color-accent:           var(--accent);
+  --color-accent-hover:     var(--accent-hover);
+  --color-accent-deep:      var(--accent-deep);
+  --color-accent-fg:        var(--accent-foreground);
+  --color-border:           var(--border);
+  --color-border-strong:    var(--border-strong);
+  --color-red-50:           var(--red-50);
+  --color-red-100:          var(--red-100);
+  --color-red-200:          var(--red-200);
+  --color-red-300:          var(--red-300);
+  --color-red-400:          var(--red-400);
+  --color-red-500:          var(--red-500);
+
+  --color-foreground:           var(--foreground);
+  --color-card:                 var(--card);
+  --color-card-foreground:      var(--card-foreground);
+  --color-popover:              var(--popover);
+  --color-popover-foreground:   var(--popover-foreground);
+  --color-primary:              var(--primary);
+  --color-primary-foreground:   var(--primary-foreground);
+  --color-secondary:            var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted:                var(--muted);
+  --color-muted-foreground:     var(--muted-foreground);
+  --color-destructive:          var(--destructive);
+  --color-input:                var(--input);
+  --color-ring:                 var(--ring);
+  --color-success:              var(--success);
+  --color-warning:              var(--warning);
+
+  /* Console-specific: the accent used for the internal-tool chrome, kept
+     separate from the client-facing red so admin surfaces read as operations. */
+  --color-console-frame: #05060A;
+  --color-console-panel: #0B0C11;
+}
+
+html {
+  /* The console is a fixed-surface operations tool, not a document. */
+  color-scheme: dark;
+}
+
+body {
+  background: var(--console-frame);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
