@@ -131,6 +131,7 @@ model User {
   assignedCustomers             Customer[]              @relation("CustomerAssignee")
   assignedCustomerConversations CustomerConversation[]  @relation("CustomerConversationAssignee")
 
+  @@index([organizationId, role])
   @@map("users")
 }
 
@@ -155,6 +156,9 @@ model Project {
   documents    Document[]
   reports      Report[]
 
+  @@index([organizationId, status])
+  @@index([organizationId, ownerId])
+  @@index([organizationId, dueDate])
   @@map("projects")
 }
 
@@ -173,6 +177,8 @@ model ProjectActivity {
   project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   author       User         @relation(fields: [authorId], references: [id])
 
+  @@index([organizationId, projectId, createdAt])
+  @@index([projectId])
   @@map("project_activities")
 }
 
@@ -204,6 +210,8 @@ model Insight {
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   actions      InsightAction[]
 
+  @@index([organizationId, severity])
+  @@index([organizationId, createdAt])
   @@map("insights")
 }
 
@@ -218,6 +226,7 @@ model InsightAction {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   insight      Insight      @relation(fields: [insightId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId, insightId])
   @@map("insight_actions")
 }
 
@@ -238,6 +247,9 @@ model Task {
   project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
   assignee     User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
 
+  @@index([organizationId, status])
+  @@index([organizationId, assigneeId])
+  @@index([projectId])
   @@map("tasks")
 }
 
@@ -309,6 +321,7 @@ model Conversation {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   messages     Message[]
 
+  @@index([organizationId, updatedAt])
   @@map("conversations")
 }
 
@@ -326,6 +339,7 @@ model Message {
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation(fields: [senderId], references: [id])
 
+  @@index([organizationId, conversationId, createdAt])
   @@map("messages")
 }
 

@@ -77,6 +77,9 @@ export async function POST(request: Request): Promise<Response> {
       size: validation.fileSize,
     });
 
+    const { trackEvent } = await import("@/app/lib/analytics");
+    trackEvent("document_uploaded", { fileName: validation.fileName, size: validation.fileSize }, { organizationId: session.organizationId, userId: session.userId });
+
     return json({
       uploadUrl,
       storageKey: key,

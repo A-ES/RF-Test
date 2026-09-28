@@ -24,7 +24,9 @@ function createPrismaClient(): PrismaClient {
   const isAdminApp = process.env.RF_APP === "admin";
   let rawUrl: string | undefined;
   if (isAdminApp) {
-    rawUrl = process.env.ADMIN_DATABASE_URL;
+    rawUrl = !isProd && process.env.ADMIN_DATABASE_URL_LOCAL
+      ? process.env.ADMIN_DATABASE_URL_LOCAL
+      : process.env.ADMIN_DATABASE_URL;
     if (!rawUrl) {
       throw new Error(
         "ADMIN_DATABASE_URL is not set. apps/admin must connect with the dedicated rf_admin_app role; " +

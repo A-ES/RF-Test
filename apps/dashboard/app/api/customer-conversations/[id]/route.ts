@@ -192,5 +192,12 @@ export async function PATCH(
     metadata: { before: { status: existing.status }, after: updateData },
   });
 
+  const { trackEvent } = await import("@/app/lib/analytics");
+  if (newStatus === "HUMAN_ESCALATION") {
+    trackEvent("customer_conversation_escalated", { conversationId: id }, { organizationId: session.organizationId, userId: session.userId });
+  } else if (newStatus === "RESOLVED") {
+    trackEvent("customer_conversation_resolved", { conversationId: id }, { organizationId: session.organizationId, userId: session.userId });
+  }
+
   return json({ conversation: updated });
 }
