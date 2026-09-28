@@ -294,20 +294,11 @@ async function escalate(input: {
       recipientIds: [assignedEmployeeId],
       title,
       body,
+      type: "HUMAN_ESCALATION",
+      linkHref: `/conversations?id=${input.ctx.conversation.id}`,
       category: "emailAlerts",
     });
   }
-
-  await publishToChannel(
-    orgChannel(input.organizationId, "notifications"),
-    REALTIME_EVENTS.notificationCreated,
-    {
-      title,
-      body,
-      conversationId: input.ctx.conversation.id,
-      customerId: input.ctx.customer.id,
-    },
-  );
 
   await writeAuditLog({
     organizationId: input.organizationId,

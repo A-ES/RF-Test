@@ -455,12 +455,8 @@ describe("processCustomerAiReply", () => {
       expect.objectContaining({
         organizationId: "org_acme",
         recipientIds: ["usr_priya"],
+        type: "HUMAN_ESCALATION",
       }),
-    );
-    expect(mocks.publishToChannel).toHaveBeenCalledWith(
-      "rf-intel:org:org_acme:notifications",
-      REALTIME_EVENTS.notificationCreated,
-      expect.objectContaining({ conversationId: "cusconv_jordan" }),
     );
     expect(mocks.writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({

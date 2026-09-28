@@ -336,12 +336,17 @@ model Notification {
   userId         String
   title          String
   body           String
+  type           String   @default("GENERAL")
+  linkHref       String?
+  metadataJson   String?
   read           Boolean  @default(false)
   createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId, userId, read])
+  @@index([createdAt])
   @@map("notifications")
 }
 

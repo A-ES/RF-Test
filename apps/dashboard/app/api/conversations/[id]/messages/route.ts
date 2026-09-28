@@ -143,11 +143,13 @@ export async function POST(
   recipientIds.delete(sender.id);
   for (const member of rfTeam) recipientIds.add(member.id);
 
-  const delivered = await deliverNotifications({
+  await deliverNotifications({
     organizationId: session.organizationId,
     recipientIds: [...recipientIds],
     title: `New message in ${conversation.topic}`,
     body: truncate(content, NOTIFICATION_BODY_LENGTH),
+    type: "INTERNAL_MESSAGE",
+    linkHref: `/messages?id=${conversation.id}`,
     category: "emailAlerts",
   });
 
@@ -159,17 +161,6 @@ export async function POST(
       message: serializeMessage(message),
     },
   );
-
-  if (delivered.length > 0) {
-    await publishToChannel(
-      orgChannel(session.organizationId, "notifications"),
-      REALTIME_EVENTS.notificationCreated,
-      {
-        conversationId: conversation.id,
-        recipientIds: delivered.map((entry) => entry.userId),
-      },
-    );
-  }
 
   return json({ message: serializeMessage(message) }, 201);
 }
