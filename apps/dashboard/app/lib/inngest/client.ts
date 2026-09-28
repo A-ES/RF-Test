@@ -22,3 +22,15 @@ export interface InsightGenerateEventData {
   /** Human-readable trigger reason, stored in logs only */
   triggeredBy: "schedule" | "manual";
 }
+
+// ─── Customer inbound AI reply ────────────────────────────────────────────────
+
+/** Fired by the messaging webhook after a customer message is persisted. */
+export const CUSTOMER_MESSAGE_AI_EVENT = "customer-message/ai-response.requested";
+
+export interface CustomerMessageAiEventData {
+  organizationId: string;
+  customerId: string;
+  conversationId: string;
+  messageId: string;
+}

@@ -1577,6 +1577,28 @@ async function main() {
   });
   console.log(`✓ Organization settings seeded for ${org.name} (AI model + escalation threshold)`);
 
+  // 14. WhatsApp Business inbox for the demo tenant
+  //
+  // Inbound WhatsApp webhooks identify the organization by Meta's
+  // `metadata.phone_number_id`, looked up on MessagingInbox.externalAddress.
+  await prisma.messagingInbox.upsert({
+    where: {
+      provider_externalAddress: {
+        provider: "WHATSAPP",
+        externalAddress: "pnid_acme_demo",
+      },
+    },
+    update: { organizationId: org.id, displayLabel: "+15550001001" },
+    create: {
+      id: "inbox_acme_whatsapp",
+      organizationId: org.id,
+      provider: "WHATSAPP",
+      externalAddress: "pnid_acme_demo",
+      displayLabel: "+15550001001",
+    },
+  });
+  console.log(`✓ WhatsApp inbox seeded for ${org.name} (phone_number_id=pnid_acme_demo)`);
+
   console.log("🎉 Database seeding completed successfully!");
 }
 

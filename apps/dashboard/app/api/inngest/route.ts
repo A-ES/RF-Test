@@ -4,6 +4,7 @@ import {
   processDocumentFunction,
   generateInsightsScheduled,
   generateInsightsOnDemand,
+  generateCustomerAiReply,
 } from "@/app/lib/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -12,5 +13,6 @@ export const { GET, POST, PUT } = serve({
     processDocumentFunction,
     generateInsightsScheduled,
     generateInsightsOnDemand,
+    generateCustomerAiReply,
   ],
 });

@@ -141,6 +141,7 @@ export type {
   Customer,
   CustomerConversation,
   CustomerMessage,
+  MessagingInbox,
   RfAdminUser,
   OrganizationSettings,
   Plan,
@@ -166,6 +167,7 @@ export {
   CustomerConversationStatus,
   CustomerConversationPriority,
   CustomerMessageSender,
+  MessagingProviderKind,
   BillingInterval,
   SubscriptionStatus,
 } from "@prisma/client";

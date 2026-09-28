@@ -95,6 +95,7 @@ model Organization {
   customers               Customer[]
   customerConversations   CustomerConversation[]
   customerMessages        CustomerMessage[]
+  messagingInboxes        MessagingInbox[]
   settings                OrganizationSettings?
   subscriptions           Subscription[]
 
@@ -680,6 +681,8 @@ model Customer {
   @@index([organizationId, assignedEmployeeId])
   @@index([organizationId, lastInteractionAt])
   @@index([organizationId, email])
+  @@index([organizationId, phone])
+  @@unique([organizationId, whatsapp])
   @@map("customers")
 }
 
@@ -722,14 +725,47 @@ model CustomerMessage {
   body            String
   // Model confidence for the reply the AI drafted. Non-null only for AI messages.
   confidenceScore Float?
+  // Provider-issued id (e.g. WhatsApp wamid). Used to ignore webhook retries.
+  providerMessageId String?
   createdAt       DateTime              @default(now())
 
   organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   conversation CustomerConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
+  @@unique([organizationId, providerMessageId])
   @@index([conversationId, createdAt])
   @@index([organizationId, createdAt])
   @@map("customer_messages")
+}
+
+// ─── Messaging inboxes (channel → Organization routing) ───────────────────────
+//
+// Organization resolution for inbound webhooks:
+//   Each tenant that receives customer messages owns one or more inboxes.
+//   WhatsApp: `externalAddress` is Meta's `metadata.phone_number_id` (the
+//   Cloud API id of the business number, not the human-readable E.164).
+//   Email (later): `externalAddress` will be the inbound mailbox, lowercased.
+//   The webhook never trusts a client-supplied organizationId. It looks up
+//   (provider, externalAddress) here and uses the organizationId on that row.
+enum MessagingProviderKind {
+  WHATSAPP
+  EMAIL
+}
+
+model MessagingInbox {
+  id              String                 @id @default(cuid())
+  organizationId  String
+  provider        MessagingProviderKind
+  externalAddress String
+  displayLabel    String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalAddress])
+  @@index([organizationId, provider])
+  @@map("messaging_inboxes")
 }
 
 // ─── RF Admin Console Identity (top-level, deliberately NOT tenant-scoped) ──────
