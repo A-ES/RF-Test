@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "installCommand": "npm install -g pnpm@9.15.4 && cd ../.. && pnpm install",
+  "installCommand": "npm i -g corepack@0.31 && corepack enable && cd ../.. && pnpm install",
   "buildCommand": "cd ../.. && pnpm --filter rf-intelligence build",
   "outputDirectory": ".next"
 }

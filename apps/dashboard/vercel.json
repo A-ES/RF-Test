@@ -1,7 +1,7 @@
 {
   "buildCommand": "cd ../.. && pnpm --filter @rf-intelligence/db db:generate && pnpm --filter @rf-intelligence/dashboard build",
   "devCommand": "pnpm dev",
-  "installCommand": "npm install -g pnpm@9.15.4 && cd ../.. && pnpm install",
+  "installCommand": "npm i -g corepack@0.31 && corepack enable && cd ../.. && pnpm install",
   "framework": "nextjs",
   "outputDirectory": ".next"
 }
