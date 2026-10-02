@@ -5,6 +5,7 @@ import {
   generateInsightsScheduled,
   generateInsightsOnDemand,
   generateCustomerAiReply,
+  deliverInternalMessageNotificationFunction,
 } from "@/app/lib/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -14,5 +15,6 @@ export const { GET, POST, PUT } = serve({
     generateInsightsScheduled,
     generateInsightsOnDemand,
     generateCustomerAiReply,
+    deliverInternalMessageNotificationFunction,
   ],
 });

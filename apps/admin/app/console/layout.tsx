@@ -18,6 +18,7 @@ import {
   Settings,
   LogOut,
   CreditCard,
+  MessageSquare,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,11 @@ const NAV = [
     href: "/console/organizations",
     label: "Organizations",
     icon: Building2,
+  },
+  {
+    href: "/console/conversations",
+    label: "Client Messages",
+    icon: MessageSquare,
   },
   {
     href: "/console/analytics",

@@ -3,6 +3,13 @@ import { prisma } from "@/app/lib/db";
 import { serializeConversationSummary } from "@/app/lib/conversations";
 import { orgChannel, REALTIME_EVENTS } from "@/app/lib/realtime/channels";
 import { publishToChannel } from "@/app/lib/realtime/server";
+import { writeAuditLog } from "@/app/lib/audit";
+import {
+  getCachedConversationList,
+  setCachedConversationList,
+  invalidateConversationCaches,
+} from "@/app/lib/conversations-cache";
+import { invalidateDashboardCache } from "@/app/api/dashboard/route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,10 +35,28 @@ export async function GET(request: Request): Promise<Response> {
   const session = await getSession();
   if (!session) return json({ error: "Unauthorized" }, 401);
 
-  const limit = parseLimit(new URL(request.url).searchParams.get("limit"));
+  const url = new URL(request.url);
+  const limit = parseLimit(url.searchParams.get("limit"));
+  const statusParam = url.searchParams.get("status");
+
+  const cacheKey = `${session.organizationId}:${statusParam ?? "ALL"}:${limit}`;
+  if (process.env.NODE_ENV !== "test") {
+    const cached = getCachedConversationList<{ conversations: unknown }>(cacheKey);
+    if (cached) {
+      return json(cached);
+    }
+  }
+
+  const whereClause: Record<string, unknown> = {
+    organizationId: session.organizationId,
+  };
+
+  if (statusParam === "OPEN" || statusParam === "RESOLVED" || statusParam === "CLOSED") {
+    whereClause.status = statusParam;
+  }
 
   const conversations = await prisma.conversation.findMany({
-    where: { organizationId: session.organizationId },
+    where: whereClause,
     orderBy: { updatedAt: "desc" },
     take: limit,
     include: {
@@ -40,13 +65,31 @@ export async function GET(request: Request): Promise<Response> {
         take: 1,
         select: { content: true, createdAt: true },
       },
+      participants: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              avatarInitials: true,
+              role: true,
+            },
+          },
+        },
+      },
       _count: { select: { messages: true } },
     },
   });
 
-  return json({
+  const payload = {
     conversations: conversations.map(serializeConversationSummary),
-  });
+  };
+
+  if (process.env.NODE_ENV !== "test") {
+    setCachedConversationList(cacheKey, payload);
+  }
+
+  return json(payload);
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -68,6 +111,7 @@ export async function POST(request: Request): Promise<Response> {
     typeof body.rfLead === "string" && body.rfLead.trim().length > 0
       ? body.rfLead.trim()
       : DEFAULT_RF_LEAD;
+  const type = body.type === "DIRECT" ? "DIRECT" : "TEAM";
 
   if (!topic) return json({ error: "A topic is required" }, 400);
   if (topic.length > MAX_TOPIC_LENGTH) {
@@ -92,23 +136,59 @@ export async function POST(request: Request): Promise<Response> {
       topic,
       contextLabel,
       rfLead,
+      type,
+      status: "OPEN",
+      participants: {
+        create: [
+          {
+            organizationId: session.organizationId,
+            userId: session.userId,
+            role: "LEAD",
+            lastReadAt: new Date(),
+          },
+        ],
+      },
+    },
+    include: {
+      participants: {
+        include: {
+          user: {
+            select: { id: true, name: true, avatarInitials: true, role: true },
+          },
+        },
+      },
+      messages: {
+        take: 1,
+        select: { content: true, createdAt: true },
+      },
+      _count: { select: { messages: true } },
     },
   });
+
+  // Invalidate conversation list and dashboard caches
+  invalidateConversationCaches(session.organizationId, conversation.id);
+  invalidateDashboardCache(session.organizationId);
+
+  // Write audit log asynchronously
+  void writeAuditLog({
+    organizationId: session.organizationId,
+    userId: session.userId,
+    action: "conversation.created",
+    entityType: "Conversation",
+    entityId: conversation.id,
+    metadata: { topic, contextLabel, type },
+  }).catch((err) => console.error("Audit log error:", err));
+
+  const serialized = serializeConversationSummary(conversation);
 
   await publishToChannel(
     orgChannel(session.organizationId, "messages"),
     REALTIME_EVENTS.conversationCreated,
     {
-      conversation: {
-        id: conversation.id,
-        topic: conversation.topic,
-        contextLabel: conversation.contextLabel,
-        rfLead: conversation.rfLead,
-        unread: conversation.unread,
-        createdAt: conversation.createdAt,
-      },
+      conversation: serialized,
     },
   );
 
-  return json({ conversation }, 201);
+  return json({ conversation: serialized }, 201);
 }
+

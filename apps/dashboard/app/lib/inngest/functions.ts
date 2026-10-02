@@ -5,10 +5,12 @@ import {
   CUSTOMER_MESSAGE_AI_EVENT,
   DOCUMENT_PROCESS_EVENT,
   INSIGHT_GENERATE_EVENT,
+  INTERNAL_MESSAGE_NOTIFY_EVENT,
   inngest,
   type CustomerMessageAiEventData,
   type DocumentProcessEventData,
   type InsightGenerateEventData,
+  type InternalMessageNotifyEventData,
 } from "@/app/lib/inngest/client";
 
 // ─── Document processing ──────────────────────────────────────────────────────
@@ -100,5 +102,63 @@ export const generateCustomerAiReply = inngest.createFunction(
     const data = event.data as CustomerMessageAiEventData;
 
     return step.run("draft-reply", () => processCustomerAiReply(data));
+  },
+);
+
+// ─── Internal Conversation Notification ────────────────────────────────────────
+
+export const deliverInternalMessageNotificationFunction = inngest.createFunction(
+  {
+    id: "internal-message-notification",
+    retries: 2,
+    triggers: [{ event: INTERNAL_MESSAGE_NOTIFY_EVENT }],
+  },
+  async ({ event, step }) => {
+    const data = event.data as InternalMessageNotifyEventData;
+
+    return step.run("deliver-notifications", async () => {
+      const { prisma } = await import("@/app/lib/db");
+      const { deliverNotifications } = await import("@/app/lib/notifications");
+
+      const [priorSenders, sender, rfTeam] = await Promise.all([
+        prisma.message.findMany({
+          where: {
+            conversationId: data.conversationId,
+            organizationId: data.organizationId,
+          },
+          select: { senderId: true },
+          distinct: ["senderId"],
+        }),
+        prisma.user.findFirst({
+          where: { id: data.senderId, organizationId: data.organizationId },
+          select: { id: true, isRFTeam: true },
+        }),
+        prisma.user.findMany({
+          where: { organizationId: data.organizationId, isRFTeam: true },
+          select: { id: true },
+        }),
+      ]);
+
+      const isRF = sender?.isRFTeam ?? false;
+      const recipientIds = new Set(priorSenders.map((row) => row.senderId));
+      recipientIds.delete(data.senderId);
+      if (!isRF) {
+        for (const member of rfTeam) recipientIds.add(member.id);
+      }
+
+      if (recipientIds.size > 0) {
+        await deliverNotifications({
+          organizationId: data.organizationId,
+          recipientIds: [...recipientIds],
+          title: `New message in ${data.topic}`,
+          body: data.content.length > 140 ? `${data.content.slice(0, 139)}…` : data.content,
+          type: "INTERNAL_MESSAGE",
+          linkHref: `/messages?id=${data.conversationId}`,
+          category: "emailAlerts",
+        });
+      }
+
+      return { deliveredCount: recipientIds.size };
+    });
   },
 );

@@ -19,6 +19,8 @@ export interface Session {
   name: string;
   email: string;
   role: string;
+  avatarInitials?: string;
+  isRFTeam?: boolean;
   organization?: {
     id: string;
     name: string;
@@ -31,14 +33,18 @@ interface TokenPayload {
   iat: number;
 }
 
-// In-memory LRU cache for verified sessions: userId -> { session, expiresAt }
+// In-memory cache for verified sessions: userId -> { session, expiresAt }
 interface CachedSession {
   session: Session;
   expiresAt: number;
 }
-const sessionCache = new Map<string, CachedSession>();
-const sessionInFlight = new Map<string, Promise<Session | null>>();
-const SESSION_CACHE_TTL_MS = 45_000; // 45 seconds in-memory cache keyed by session/user id
+const globalForSession = globalThis as unknown as {
+  __sessionCache?: Map<string, CachedSession>;
+  __sessionInFlight?: Map<string, Promise<Session | null>>;
+};
+const sessionCache = (globalForSession.__sessionCache ??= new Map<string, CachedSession>());
+const sessionInFlight = (globalForSession.__sessionInFlight ??= new Map<string, Promise<Session | null>>());
+const SESSION_CACHE_TTL_MS = 5 * 60_000; // 5 minutes in-memory cache keyed by session/user id
 
 export function invalidateSessionCache(userId: string) {
   sessionCache.delete(userId);
@@ -139,6 +145,8 @@ export async function getSession(): Promise<Session | null> {
           name: true,
           email: true,
           role: true,
+          avatarInitials: true,
+          isRFTeam: true,
           organization: {
             select: {
               id: true,
@@ -157,6 +165,8 @@ export async function getSession(): Promise<Session | null> {
         name: user.name,
         email: user.email,
         role: user.role,
+        avatarInitials: user.avatarInitials ?? undefined,
+        isRFTeam: user.isRFTeam ?? false,
         organization: user.organization,
       };
 

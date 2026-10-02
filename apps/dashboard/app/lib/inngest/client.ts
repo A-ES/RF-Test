@@ -1,6 +1,17 @@
 import { Inngest } from "inngest";
 
-export const inngest = new Inngest({ id: "rf-intelligence" });
+const isDev =
+  process.env.NODE_ENV === "development" || process.env.INNGEST_DEV === "1";
+
+const inngestBaseUrl =
+  process.env.INNGEST_BASE_URL ||
+  (isDev ? "http://127.0.0.1:8288" : undefined);
+
+export const inngest = new Inngest({
+  id: "rf-intelligence",
+  baseUrl: inngestBaseUrl,
+  isDev,
+});
 
 // ─── Document processing ──────────────────────────────────────────────────────
 
@@ -33,4 +44,18 @@ export interface CustomerMessageAiEventData {
   customerId: string;
   conversationId: string;
   messageId: string;
+}
+
+// ─── Internal Conversation Notification ────────────────────────────────────────
+
+/** Fired after an internal team/client message is persisted to dispatch notifications in background */
+export const INTERNAL_MESSAGE_NOTIFY_EVENT = "internal-message/notify.requested";
+
+export interface InternalMessageNotifyEventData {
+  organizationId: string;
+  conversationId: string;
+  senderId: string;
+  messageId: string;
+  content: string;
+  topic: string;
 }

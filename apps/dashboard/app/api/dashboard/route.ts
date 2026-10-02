@@ -27,8 +27,11 @@ interface CachedDashboard {
   data: DashboardData;
   expiresAt: number;
 }
-const dashboardCache = new Map<string, CachedDashboard>();
-const DASHBOARD_CACHE_TTL_MS = 20_000;
+const globalForDashboard = globalThis as unknown as {
+  __dashboardCache?: Map<string, CachedDashboard>;
+};
+const dashboardCache = (globalForDashboard.__dashboardCache ??= new Map<string, CachedDashboard>());
+const DASHBOARD_CACHE_TTL_MS = 30_000;
 
 export function invalidateDashboardCache(orgId: string) {
   dashboardCache.delete(orgId);
@@ -373,13 +376,13 @@ export async function GET(): Promise<Response> {
       prisma.project.findMany({
         where:   { organizationId: orgId },
         orderBy: { updatedAt: "desc" },
-        take:    10,
+        take:    5,
         select:  PROJECT_SELECT,
       }),
       prisma.insight.findMany({
         where:   { organizationId: orgId },
         orderBy: { createdAt: "desc" },
-        take:    10,
+        take:    5,
         select:  INSIGHT_SELECT,
       }),
       prisma.conversation.findMany({

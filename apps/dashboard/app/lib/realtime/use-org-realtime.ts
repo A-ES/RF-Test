@@ -21,14 +21,31 @@ interface SharedClient {
   realtime: AblyType.Realtime;
   refCount: number;
   currentChannel: string | null;
+  organizationId: string | null;
 }
 let sharedClient: SharedClient | null = null;
 let sharedClientPromise: Promise<AblyType.Realtime | null> | null = null;
 let activeRequestedChannel: string | null = null;
 
-async function getSharedRealtime(channelName?: string): Promise<AblyType.Realtime | null> {
+async function getSharedRealtime(
+  channelName?: string,
+  organizationId?: string | null,
+): Promise<AblyType.Realtime | null> {
   if (channelName) {
     activeRequestedChannel = channelName;
+  }
+
+  // If organization changed, close existing client and reset to maintain strict isolation
+  if (
+    sharedClient &&
+    organizationId &&
+    sharedClient.organizationId &&
+    sharedClient.organizationId !== organizationId
+  ) {
+    try {
+      sharedClient.realtime.close();
+    } catch {}
+    sharedClient = null;
   }
 
   if (sharedClient) {
@@ -68,7 +85,12 @@ async function getSharedRealtime(channelName?: string): Promise<AblyType.Realtim
           }
         },
       });
-      sharedClient = { realtime, refCount: 1, currentChannel: channelName ?? null };
+      sharedClient = {
+        realtime,
+        refCount: 1,
+        currentChannel: channelName ?? null,
+        organizationId: organizationId ?? null,
+      };
       return realtime;
     } finally {
       sharedClientPromise = null;
@@ -131,7 +153,7 @@ export function useOrgRealtime(
         const probe = await fetch(authProbe, { method: "GET" });
         if (!probe.ok || closed) return;
 
-        const realtime = await getSharedRealtime(channelName);
+        const realtime = await getSharedRealtime(channelName, organizationId);
         if (closed || !realtime) return;
 
         const channel = realtime.channels.get(channelName);

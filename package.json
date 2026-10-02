@@ -8,6 +8,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "inngest:dev": "pnpm --filter @rf-intelligence/dashboard inngest:dev",
     "eval:ask-rf": "pnpm --filter @rf-intelligence/dashboard test run app/ask-rf-eval.test.ts",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\""
   },

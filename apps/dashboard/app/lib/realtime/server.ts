@@ -1,4 +1,5 @@
 import * as Ably from "ably";
+import { orgChannel, parseOrganizationFromChannel } from "./channels";
 
 /**
  * Server-side realtime operations (Ably).
@@ -45,25 +46,34 @@ export async function createOrgTokenRequest(
   clientId: string,
 ): Promise<unknown> {
   const rest = getRestClient();
-  const pattern = `rf-intel:org:${organizationId}:*`;
-  // Always request a fresh tokenRequest with unique nonce to prevent Ably 40105 replay errors
+  const messagesChannel = orgChannel(organizationId, "messages");
+  const notificationsChannel = orgChannel(organizationId, "notifications");
+  // Always request a fresh tokenRequest with unique nonce to prevent Ably 40105 replay errors.
+  // Explicitly authorize authorized tenant channels with no wildcards.
   return rest.auth.createTokenRequest({
     clientId,
-    capability: JSON.stringify({ [pattern]: ["subscribe"] }),
+    capability: JSON.stringify({
+      [messagesChannel]: ["subscribe", "publish"],
+      [notificationsChannel]: ["subscribe"],
+    }),
   });
 }
 
 /**
- * Issues an Ably token request scoped to a single channel. The caller MUST have
- * already verified that the session belongs to the channel's organization.
+ * Issues an Ably token request scoped to the caller's authorized organization channels.
+ * The caller MUST have already verified that the session belongs to the channel's organization.
  * Generates a fresh tokenRequest every time with a new nonce (never cached).
  */
 export async function createChannelTokenRequest(
   channel: string,
   clientId: string,
 ): Promise<unknown> {
+  const organizationId = parseOrganizationFromChannel(channel);
+  if (organizationId) {
+    return createOrgTokenRequest(organizationId, clientId);
+  }
   const rest = getRestClient();
-  // Always request a fresh tokenRequest with unique nonce to prevent Ably 40105 replay errors
+  // Fallback for non-org channels (if any)
   return rest.auth.createTokenRequest({
     clientId,
     capability: JSON.stringify({ [channel]: ["subscribe"] }),

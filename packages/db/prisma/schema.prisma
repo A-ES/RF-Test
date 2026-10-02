@@ -63,6 +63,17 @@ enum ReportStatus {
   FAILED
 }
 
+enum ConversationStatus {
+  OPEN
+  RESOLVED
+  CLOSED
+}
+
+enum ConversationType {
+  TEAM
+  DIRECT
+}
+
 // ─── 1. Organization (Tenant) ──────────────────────────────────────────────────
 model Organization {
   id        String   @id @default(cuid())
@@ -80,7 +91,9 @@ model Organization {
   documents               Document[]
   reports                 Report[]
   conversations           Conversation[]
+  conversationParticipants ConversationParticipant[]
   messages                Message[]
+  messageAttachments      MessageAttachment[]
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
   askRfQueries            AskRfQuery[]
@@ -122,6 +135,7 @@ model User {
   uploadedDocuments             Document[]
   createdReports                Report[]
   sentMessages                  Message[]
+  conversationParticipants      ConversationParticipant[]
   notifications                 Notification[]
   notificationPreference        NotificationPreference?
   askRfQueries                  AskRfQuery[]
@@ -309,38 +323,86 @@ model Report {
 
 // ─── 10. Conversation (Internal Client ↔ RF Team) ──────────────────────────────
 model Conversation {
-  id             String   @id @default(cuid())
+  id             String             @id @default(cuid())
   organizationId String
   topic          String
   contextLabel   String
   rfLead         String
-  unread         Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  status         ConversationStatus @default(OPEN)
+  type           ConversationType   @default(TEAM)
+  unread         Boolean            @default(false)
+  resolvedAt     DateTime?
+  resolvedById   String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   messages     Message[]
+  participants ConversationParticipant[]
 
   @@index([organizationId, updatedAt])
+  @@index([organizationId, status])
   @@map("conversations")
+}
+
+// ─── 10b. ConversationParticipant ──────────────────────────────────────────────
+model ConversationParticipant {
+  id             String    @id @default(cuid())
+  conversationId String
+  organizationId String
+  userId         String?
+  role           String    @default("MEMBER") // "LEAD" | "MEMBER" | "RF_STAFF"
+  lastReadAt     DateTime?
+  joinedAt       DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([organizationId, userId])
+  @@index([conversationId])
+  @@map("conversation_participants")
 }
 
 // ─── 11. Message ───────────────────────────────────────────────────────────────
 model Message {
-  id             String   @id @default(cuid())
+  id             String              @id @default(cuid())
   organizationId String
   conversationId String
   senderId       String
-  isRFTeam       Boolean  @default(false)
+  isRFTeam       Boolean             @default(false)
   content        String
-  createdAt      DateTime @default(now())
+  messageType    String              @default("TEXT") // "TEXT" | "ATTACHMENT" | "SYSTEM"
+  createdAt      DateTime            @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender       User         @relation(fields: [senderId], references: [id])
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversation Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User                @relation(fields: [senderId], references: [id])
+  attachments  MessageAttachment[]
 
   @@index([organizationId, conversationId, createdAt])
   @@map("messages")
+}
+
+// ─── 11b. MessageAttachment ───────────────────────────────────────────────────
+model MessageAttachment {
+  id             String   @id @default(cuid())
+  organizationId String
+  messageId      String
+  fileName       String
+  fileSize       Int
+  mimeType       String
+  storageKey     String
+  fileUrl        String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  message      Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, messageId])
+  @@index([storageKey])
+  @@map("message_attachments")
 }
 
 // ─── 12. Notification ──────────────────────────────────────────────────────────
