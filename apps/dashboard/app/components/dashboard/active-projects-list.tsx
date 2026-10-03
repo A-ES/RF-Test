@@ -18,6 +18,14 @@ import {
   Check,
   User,
   ListTodo,
+  Clock,
+  FileText,
+  FileSpreadsheet,
+  Download,
+  Sparkles,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import type { Project, ProjectStatus, TaskItem } from "@/app/types/project";
@@ -79,6 +87,44 @@ function isDueSoon(iso: string): boolean {
 
 function toIso(dateStr: string): string {
   return new Date(dateStr + "T00:00:00.000Z").toISOString();
+}
+
+function formatTimestamp(isoStr?: string): string {
+  if (!isoStr) return "";
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return isoStr;
+    return d.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return isoStr;
+  }
+}
+
+function formatRelativeUpdated(isoStr?: string): string {
+  if (!isoStr) return "";
+  try {
+    const date = new Date(isoStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) return "just now";
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } catch {
+    return "";
+  }
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -416,8 +462,17 @@ export function ActiveProjectsList({
                       </span>
                     </div>
 
-                    {/* Due date + task count + activity hint */}
+                    {/* Due date + task count + updatedAt + activity hint */}
                     <div className="flex items-center gap-3">
+                      {project.updatedAt && (
+                        <span
+                          className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] font-mono"
+                          title={`Last updated: ${formatTimestamp(project.updatedAt)}`}
+                        >
+                          <Clock aria-hidden className="size-3 text-[var(--accent)]" />
+                          <span>Updated {formatRelativeUpdated(project.updatedAt)}</span>
+                        </span>
+                      )}
                       <span className="text-[11px] text-[var(--text-muted)] font-mono">
                         {totalTasks - completedTasks} open / {totalTasks} total
                       </span>
@@ -443,6 +498,36 @@ export function ActiveProjectsList({
                 {/* Expandable Subtasks & Activity Drawer */}
                 {isExpanded && (
                   <div className="border-t border-[var(--border)] bg-[var(--surface)]/50 p-4 space-y-5 animate-in slide-in-from-top-1 duration-150">
+                    {/* ── Project Metadata & Timestamps ── */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[var(--border)] text-[11px]">
+                      <div className="flex items-center gap-3 font-mono">
+                        {project.updatedAt && (
+                          <span
+                            className="flex items-center gap-1.5 text-[var(--text-secondary)]"
+                            title={project.updatedAt}
+                          >
+                            <Clock className="size-3 text-[var(--accent)]" />
+                            <span className="font-semibold text-[var(--text-primary)]">Last updated:</span>{" "}
+                            {formatTimestamp(project.updatedAt)}
+                          </span>
+                        )}
+                        {project.createdAt && (
+                          <span className="text-[var(--text-muted)]">
+                            Created:{" "}
+                            {new Date(project.createdAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] font-mono text-[var(--text-muted)]">
+                        <span>{(project.documents?.length ?? 0) + (project.reports?.length ?? 0)} files</span>
+                        <span>·</span>
+                        <span>{project.insights?.length ?? 0} insights</span>
+                      </div>
+                    </div>
                     {/* ── Subtasks Section ── */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
@@ -672,6 +757,216 @@ export function ActiveProjectsList({
                             </button>
                           </div>
                         </form>
+                      )}
+                    </div>
+
+                    {/* ── Documents & Reports Section ── */}
+                    <div className="space-y-3 pt-3 border-t border-[var(--border)]">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                          <FileText className="size-3.5 text-[var(--accent)]" />
+                          Documents &amp; Reports
+                        </h4>
+                        <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                          {(project.documents?.length ?? 0) + (project.reports?.length ?? 0)} attached
+                        </span>
+                      </div>
+
+                      {((project.documents && project.documents.length > 0) || (project.reports && project.reports.length > 0)) ? (
+                        <div className="space-y-2">
+                          {/* Documents */}
+                          {project.documents?.map((doc) => (
+                            <div
+                              key={doc.id}
+                              className="flex items-center justify-between gap-2 p-2.5 rounded-md border border-[var(--border)] bg-[var(--surface)] text-xs hover:bg-[var(--surface-elevated)] transition-colors"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="size-7 rounded bg-[var(--surface-elevated)] border border-[var(--border)] flex items-center justify-center text-[var(--accent)] shrink-0">
+                                  <FileText className="size-3.5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium text-[var(--text-primary)] text-xs">
+                                    {doc.fileName}
+                                  </p>
+                                  <div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)] font-mono">
+                                    <span>{doc.fileSize}</span>
+                                    <span>·</span>
+                                    <span>
+                                      {new Date(doc.createdAt).toLocaleDateString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                      })}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                {/* Processing status indicator */}
+                                {doc.processingStatus === "PENDING" && (
+                                  <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                    <Loader2 className="size-2.5 animate-spin" />
+                                    Processing
+                                  </span>
+                                )}
+                                {doc.processingStatus === "PROCESSED" && (
+                                  <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                    <CheckCircle2 className="size-2.5" />
+                                    Processed
+                                  </span>
+                                )}
+                                {doc.processingStatus === "FAILED" && (
+                                  <span
+                                    title={doc.failureReason ?? "Processing failed"}
+                                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20 cursor-help"
+                                  >
+                                    <AlertCircle className="size-2.5" />
+                                    Failed
+                                  </span>
+                                )}
+
+                                {/* Working view/download link using existing secure download endpoint */}
+                                <a
+                                  href={`/api/documents/${doc.id}/download`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  download={doc.fileName}
+                                  className="flex items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1 text-[11px] font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] hover:border-[var(--accent)] transition-colors"
+                                  title={`Download ${doc.fileName}`}
+                                >
+                                  <Download className="size-3" />
+                                  <span>Download</span>
+                                </a>
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Reports */}
+                          {project.reports?.map((rep) => (
+                            <div
+                              key={rep.id}
+                              className="flex items-center justify-between gap-2 p-2.5 rounded-md border border-[var(--border)] bg-[var(--surface)] text-xs hover:bg-[var(--surface-elevated)] transition-colors"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="size-7 rounded bg-[var(--surface-elevated)] border border-[var(--border)] flex items-center justify-center text-[var(--accent)] shrink-0">
+                                  <FileSpreadsheet className="size-3.5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium text-[var(--text-primary)] text-xs">
+                                    {rep.title}
+                                  </p>
+                                  <div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)] font-mono">
+                                    <span className="uppercase text-[var(--accent)]">{rep.type}</span>
+                                    <span>·</span>
+                                    <span>{rep.size}</span>
+                                    <span>·</span>
+                                    <span>
+                                      {new Date(rep.createdAt).toLocaleDateString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                      })}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                {/* Report status indicator */}
+                                {rep.status === "READY" && (
+                                  <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                    <CheckCircle2 className="size-2.5" />
+                                    Ready
+                                  </span>
+                                )}
+                                {rep.status === "PROCESSING" && (
+                                  <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                    <Loader2 className="size-2.5 animate-spin" />
+                                    Processing
+                                  </span>
+                                )}
+                                {rep.status === "FAILED" && (
+                                  <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                    <AlertCircle className="size-2.5" />
+                                    Failed
+                                  </span>
+                                )}
+
+                                {rep.fileUrl ? (
+                                  <a
+                                    href={rep.fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download
+                                    className="flex items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1 text-[11px] font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] hover:border-[var(--accent)] transition-colors"
+                                    title={`Download ${rep.title}`}
+                                  >
+                                    <Download className="size-3" />
+                                    <span>Export</span>
+                                  </a>
+                                ) : (
+                                  <span className="text-[10px] font-mono text-[var(--text-muted)] px-1">
+                                    No file
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-[var(--text-muted)] italic py-1">
+                          No documents or reports attached to this project.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* ── Linked AI Insights Section ── */}
+                    <div className="space-y-3 pt-3 border-t border-[var(--border)]">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                          <Sparkles className="size-3.5 text-[var(--accent)]" />
+                          Linked AI Insights
+                        </h4>
+                        <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                          {project.insights?.length ?? 0} linked
+                        </span>
+                      </div>
+
+                      {project.insights && project.insights.length > 0 ? (
+                        <div className="space-y-2">
+                          {project.insights.map((ins) => (
+                            <div
+                              key={ins.id}
+                              className="p-2.5 rounded-md border border-[var(--border)] bg-[var(--surface)] text-xs space-y-1 hover:bg-[var(--surface-elevated)] transition-colors"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium text-[var(--text-primary)]">
+                                  {ins.title}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "rounded px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider",
+                                    ins.severity === "CRITICAL"
+                                      ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                      : ins.severity === "HIGH"
+                                      ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                      : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                                  )}
+                                >
+                                  {ins.severity}
+                                </span>
+                              </div>
+                              {ins.recommendedAction && (
+                                <p className="text-[11px] text-[var(--text-secondary)]">
+                                  Action: {ins.recommendedAction}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-[var(--text-muted)] italic py-1">
+                          No AI insights linked to this project.
+                        </p>
                       )}
                     </div>
 

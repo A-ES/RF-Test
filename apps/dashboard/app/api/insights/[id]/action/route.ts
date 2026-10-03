@@ -105,16 +105,30 @@ export async function POST(
 
     // 3. If "Create Task" — materialise a Task row linked to no specific
     //    project (can be assigned later). Title comes from the insight.
+    //    Prevent duplicate task creation on repeated requests.
     if (typedAction === "TASK_CREATED") {
-      await tx.task.create({
-        data: {
+      const existingTask = await tx.task.findFirst({
+        where: {
           organizationId: session.organizationId,
-          title:       `[Insight] ${insight.title}`,
-          description: insight.recommendedAction,
-          status:      "TODO",
-          assigneeId:  session.userId,
+          OR: [
+            { description: { contains: `[insightId:${insight.id}]` } },
+            { title: `[Insight] ${insight.title}` },
+          ],
         },
       });
+
+      if (!existingTask) {
+        const priorityTag = insight.severity === "CRITICAL" ? "HIGH" : insight.severity === "WARNING" ? "MEDIUM" : "LOW";
+        await tx.task.create({
+          data: {
+            organizationId: session.organizationId,
+            title:       `[Insight] ${insight.title}`,
+            description: `[insightId:${insight.id}][priority:${priorityTag}] ${insight.recommendedAction}`,
+            status:      "TODO",
+            assigneeId:  session.userId,
+          },
+        });
+      }
     }
 
     return [newAction] as const;
@@ -145,8 +159,12 @@ export async function POST(
     },
   };
 
+  // Invalidate dashboard cache immediately so pending actions & insight counts update
+  const { invalidateDashboardCache } = await import("@/app/api/dashboard/route");
+  invalidateDashboardCache(session.organizationId);
+
   const { notifyOrgDataChanged } = await import("@/app/lib/data-sync");
-  await notifyOrgDataChanged(session.organizationId, ["insights", "alerts"]);
+  await notifyOrgDataChanged(session.organizationId, ["insights", "alerts", "tasks"]);
 
   const { trackEvent } = await import("@/app/lib/analytics");
   if (typedAction === "ACCEPTED") {

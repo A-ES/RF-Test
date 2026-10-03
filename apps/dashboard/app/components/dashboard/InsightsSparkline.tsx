@@ -11,6 +11,7 @@ interface InsightsSparklineProps {
   deltaValue: number;
   period: string;
   history: InsightHistoryPoint[];
+  title?: string;
 }
 
 export function InsightsSparkline({
@@ -19,6 +20,7 @@ export function InsightsSparkline({
   deltaValue,
   period,
   history,
+  title = "Insights Generated",
 }: InsightsSparklineProps) {
   const [hoveredIdx, setHoveredIdx] = React.useState<number | null>(null);
 
@@ -43,7 +45,7 @@ export function InsightsSparkline({
 
   return (
     <StatCard
-      title="AI Insights"
+      title={title}
       value={total}
       delta={delta}
       deltaValue={deltaValue}
@@ -51,7 +53,7 @@ export function InsightsSparkline({
     >
       <div
         role="region"
-        aria-label={`AI Insights 30-day trend: ${history.map((h) => `${h.date}: ${h.count}`).join(", ")}`}
+        aria-label={`${title} 30-day trend: ${history.map((h) => `${h.date}: ${h.count}`).join(", ")}`}
         className="w-full flex flex-col justify-between h-full pt-1"
       >
         <div className="relative w-full h-[110px] flex items-center">

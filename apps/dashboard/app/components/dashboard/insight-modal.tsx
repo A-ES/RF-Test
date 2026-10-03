@@ -250,14 +250,21 @@ export function InsightModal({ insight, onClose, onAction, actionPending }: Insi
           </button>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => void onAction(insight.id, "TASK_CREATED")}
-              disabled={busy}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] transition-colors disabled:opacity-50"
-            >
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <PlusSquare className="size-4 text-blue-400" />}
-              Create Task
-            </button>
+            {insight.actionStatus === "TASK_CREATED" ? (
+              <span className="flex items-center gap-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3.5 py-2 text-xs font-medium text-blue-400">
+                <PlusSquare className="size-4 text-blue-400" />
+                Task Created
+              </span>
+            ) : (
+              <button
+                onClick={() => void onAction(insight.id, "TASK_CREATED")}
+                disabled={busy}
+                className="flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] transition-colors disabled:opacity-50"
+              >
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <PlusSquare className="size-4 text-blue-400" />}
+                Create Task
+              </button>
+            )}
             <button
               onClick={() => void onAction(insight.id, "ACCEPTED")}
               disabled={busy}

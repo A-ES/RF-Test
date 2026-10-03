@@ -46,13 +46,7 @@ export function AlertsPanel({ alerts: initialAlerts }: AlertsPanelProps) {
             id="alerts-heading"
             className="mt-0.5 text-base font-semibold text-[var(--text-primary)] tracking-tight"
           >
-            {visible.length === 0 ? (
-              "All clear"
-            ) : (
-              <>
-                {visible.length} item{visible.length !== 1 ? "s" : ""} need attention
-              </>
-            )}
+            Important Alerts {visible.length > 0 ? `(${visible.length} require attention)` : "— All Clear"}
           </h2>
         </div>
 

@@ -1,44 +1,32 @@
 import type { Project } from "@/app/types/project";
 import type { Insight } from "@/app/types/insight";
-import type { RecentConversation } from "@/app/types/dashboard";
+import type {
+  RecentConversation,
+  ProjectStatusCounts,
+  ConversationHistoryPoint,
+  InsightHistoryPoint,
+  TeamRoleCounts,
+} from "@/app/types/dashboard";
+
+export type {
+  ProjectStatusCounts,
+  ConversationHistoryPoint,
+  InsightHistoryPoint,
+  TeamRoleCounts,
+};
 
 /**
- * Helper types for Bento Charts
- */
-
-export interface ProjectStatusCounts {
-  onTrack: number;
-  atRisk: number;
-  blocked: number;
-  completed: number;
-  total: number;
-}
-
-export interface ConversationHistoryPoint {
-  day: string;
-  count: number;
-}
-
-export interface InsightHistoryPoint {
-  date: string;
-  count: number;
-}
-
-export interface TeamRoleCounts {
-  admin: number;
-  member: number;
-  viewer: number;
-  pending: number;
-  total: number;
-}
-
-/**
- * Derives project breakdown by status from projects list and total count.
+ * Derives project breakdown by status from projects list or returns real DB counts.
  */
 export function deriveProjectStatusCounts(
   projects: Project[],
-  totalMetricValue: number
+  totalMetricValue: number,
+  exactCounts?: ProjectStatusCounts
 ): ProjectStatusCounts {
+  if (exactCounts) {
+    return exactCounts;
+  }
+
   let onTrack = 0;
   let atRisk = 0;
   let blocked = 0;
@@ -51,36 +39,28 @@ export function deriveProjectStatusCounts(
     else if (p.status === "COMPLETED") completed++;
   }
 
-  // If projects list only contains top 5, scale proportionally to match total active projects
-  const activeSample = onTrack + atRisk + blocked;
-  const totalActive = totalMetricValue;
-
-  if (activeSample > 0 && totalActive > activeSample) {
-    const scale = totalActive / activeSample;
-    onTrack = Math.round(onTrack * scale);
-    atRisk = Math.round(atRisk * scale);
-    blocked = Math.max(0, totalActive - onTrack - atRisk);
-  } else if (totalActive > 0 && activeSample === 0) {
-    onTrack = totalActive;
-  }
-
   return {
     onTrack,
     atRisk,
     blocked,
     completed,
-    total: totalActive,
+    total: totalMetricValue || (onTrack + atRisk + blocked),
   };
 }
 
 /**
- * Derives a 7-day conversation activity sparkline from recent conversations and current count.
- * TODO: Swap with real daily conversation telemetry endpoint when time-series DB table is provisioned.
+ * Derives a 7-day conversation activity chart from real conversation dates.
+ * Truthful 0 counts when no conversations occurred on a given day.
  */
 export function deriveConversationsHistory(
   recentConversations: RecentConversation[],
-  totalCount: number
+  totalCount: number,
+  exactHistory?: ConversationHistoryPoint[]
 ): ConversationHistoryPoint[] {
+  if (exactHistory && exactHistory.length > 0) {
+    return exactHistory;
+  }
+
   const days = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
   const todayIdx = (new Date().getDay() + 6) % 7; // 0 for Mon ... 6 for Sun
   const orderedDays: string[] = [];
@@ -102,37 +82,45 @@ export function deriveConversationsHistory(
     }
   }
 
-  // Ensure baseline distribution reflects totalCount
-  const base = Math.max(0, Math.floor(totalCount / 7));
-  return orderedDays.map((day, i) => {
-    // If we have total count > 0, make sure historical bars look active
-    const count = totalCount === 0 ? 0 : Math.max(buckets[i], base + ((i * 3) % 4) + (i === 6 ? (totalCount % 3) : 0));
-    return {
-      day,
-      count,
-    };
-  });
+  return orderedDays.map((day, i) => ({
+    day,
+    count: buckets[i] ?? 0,
+  }));
 }
 
 /**
- * Derives 30-day insight volume points from insight records.
- * TODO: Swap with real daily insights telemetry endpoint when available.
+ * Derives 30-day insight volume points from real insight timestamps.
+ * Truthful 0 counts when no insights exist. No synthetic curves or Math.sin.
  */
 export function deriveInsightsHistory(
-  insights: Insight[],
-  totalCount: number
+  insights: Array<{ createdAt: string | Date }>,
+  totalCount: number,
+  exactHistory?: InsightHistoryPoint[]
 ): InsightHistoryPoint[] {
-  // Generate 8 sample intervals over 30 days
+  if (exactHistory && exactHistory.length > 0) {
+    return exactHistory;
+  }
+
   const points = 8;
   const history: InsightHistoryPoint[] = [];
   const now = Date.now();
+  const intervalMs = (30 / points) * 86_400_000;
 
   for (let i = points - 1; i >= 0; i--) {
-    const d = new Date(now - i * (30 / points) * 86_400_000);
+    const intervalEnd = now - i * intervalMs;
+    const intervalStart = intervalEnd - intervalMs;
+    const d = new Date(intervalEnd);
     const label = `${d.getMonth() + 1}/${d.getDate()}`;
-    // Synthesize curve leading up to current volume
-    const curveFactor = Math.sin(((points - 1 - i) / points) * Math.PI * 0.8) * 0.4 + 0.6;
-    const count = totalCount === 0 ? 0 : Math.max(1, Math.round((totalCount / points) * curveFactor * (1 + ((i % 3) * 0.15))));
+
+    // Count real insights created within this interval
+    let count = 0;
+    for (const ins of insights) {
+      const t = new Date(ins.createdAt).getTime();
+      if (t >= intervalStart && t < intervalEnd) {
+        count++;
+      }
+    }
+
     history.push({
       date: label,
       count,
@@ -143,24 +131,21 @@ export function deriveInsightsHistory(
 }
 
 /**
- * Derives team role distribution based on total member count.
- * TODO: Swap with live /api/users count breakdown once role filtering API is exposed.
+ * Returns team role distribution from database counts, or truthful zeros.
  */
-export function deriveTeamRoles(totalMembers: number): TeamRoleCounts {
-  if (totalMembers <= 0) {
-    return { admin: 0, member: 0, viewer: 0, pending: 0, total: 0 };
+export function deriveTeamRoles(
+  totalMembers: number,
+  exactRoles?: TeamRoleCounts
+): TeamRoleCounts {
+  if (exactRoles) {
+    return exactRoles;
   }
-  // Standard breakdown: ~1-2 Admins, majority Members, balance Viewers
-  const admin = totalMembers > 4 ? 2 : 1;
-  const remaining = Math.max(0, totalMembers - admin);
-  const member = Math.max(1, Math.floor(remaining * 0.7));
-  const viewer = Math.max(0, remaining - member);
-  const pending = 1; // 1 pending invitation
+
   return {
-    admin,
-    member,
-    viewer,
-    pending,
+    admin: 0,
+    member: totalMembers,
+    viewer: 0,
+    pending: 0,
     total: totalMembers,
   };
 }

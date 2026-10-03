@@ -169,6 +169,7 @@ model Project {
   tasks        Task[]
   documents    Document[]
   reports      Report[]
+  insights     Insight[]
 
   @@index([organizationId, status])
   @@index([organizationId, ownerId])
@@ -221,11 +222,14 @@ model Insight {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  projectId    String?
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
   actions      InsightAction[]
 
   @@index([organizationId, severity])
   @@index([organizationId, createdAt])
+  @@index([projectId])
   @@map("insights")
 }
 

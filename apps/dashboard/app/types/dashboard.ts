@@ -62,6 +62,67 @@ export interface RecentConversation {
   contextLabel: string;
 }
 
+// ─── Visual Breakdown & Telemetry ───────────────────────────────────────────
+
+export interface ProjectStatusCounts {
+  onTrack: number;
+  atRisk: number;
+  blocked: number;
+  completed: number;
+  total: number;
+}
+
+export interface AIProcessStats {
+  queued: number;
+  processing: number;
+  activeConversations: number;
+  completed: number;
+  failed: number;
+  total: number;
+  /** Legacy alias for queued + processing + activeConversations */
+  active: number;
+}
+
+export interface PendingActionStats {
+  actionableTasks: number;
+  reviewSignals: number;
+  openTasks: number;
+  escalations: number;
+  unreadInsights: number;
+  atRiskProjects: number;
+  total: number;
+}
+
+export interface DashboardActivity {
+  id: string;
+  authorName: string;
+  authorInitials: string;
+  projectName: string;
+  action: string;
+  details?: string | null;
+  type: "status" | "comment" | "task" | "milestone";
+  relativeTime: string;
+  createdAt: string;
+}
+
+export interface InsightHistoryPoint {
+  date: string;
+  count: number;
+}
+
+export interface ConversationHistoryPoint {
+  day: string;
+  count: number;
+}
+
+export interface TeamRoleCounts {
+  admin: number;
+  member: number;
+  viewer: number;
+  pending: number;
+  total: number;
+}
+
 // ─── Dashboard API response ───────────────────────────────────────────────────
 
 export interface SectionErrors {
@@ -70,12 +131,15 @@ export interface SectionErrors {
   metrics?: boolean;
   alerts?: boolean;
   conversations?: boolean;
+  activities?: boolean;
   counts?: {
     projects?: boolean;
     conversations?: boolean;
     insights?: boolean;
     renewal?: boolean;
     team?: boolean;
+    aiProcesses?: boolean;
+    pendingActions?: boolean;
   };
 }
 
@@ -85,12 +149,26 @@ export interface DashboardData {
   metricCards: MetricCard[];
   /** Up to 5 most-recently-updated projects */
   projects: Project[];
+  /** Exact project status distribution from database */
+  projectStatusCounts?: ProjectStatusCounts;
+  /** AI processes and tasks breakdown */
+  aiProcessStats?: AIProcessStats;
+  /** Pending actions requiring human attention */
+  pendingActionStats?: PendingActionStats;
+  /** Recent system and project activities */
+  recentActivities?: DashboardActivity[];
   /** Up to 5 most-recent insights */
   insights: Insight[];
   unreadInsightCount: number;
+  /** Real 30-day insight generation points */
+  insightHistory?: InsightHistoryPoint[];
   alerts: DashboardAlert[];
   /** Up to 5 most-recently-updated conversations */
   recentConversations: RecentConversation[];
+  /** Real 7-day conversation message points */
+  conversationHistory?: ConversationHistoryPoint[];
+  /** Real database user role breakdown */
+  teamRoles?: TeamRoleCounts;
   /** Per-section error flags indicating which sections failed to load (e.g. timeout or P1001) */
   errors?: SectionErrors;
 }

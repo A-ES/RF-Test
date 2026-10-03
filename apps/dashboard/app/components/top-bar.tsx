@@ -27,6 +27,7 @@ import { useSession } from "@/app/providers/session-provider";
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/projects": "Projects",
+  "/tasks": "Tasks & Actions",
   "/ai-insights": "AI Insights",
   "/ask-rf": "Ask RF",
   "/conversations": "Customer Conversations",

@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  CheckSquare,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { Separator } from "@/app/components/ui/separator";
@@ -39,6 +40,11 @@ const NAV_ITEMS = [
     label: "Projects",
     href: "/projects",
     icon: FolderKanban,
+  },
+  {
+    label: "Tasks & Actions",
+    href: "/tasks",
+    icon: CheckSquare,
   },
   {
     label: "Inventory",

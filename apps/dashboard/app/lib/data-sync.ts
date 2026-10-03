@@ -6,6 +6,7 @@ import { revalidateTag } from "next/cache";
 
 export type DashboardSection =
   | "projects"
+  | "tasks"
   | "insights"
   | "conversations"
   | "reports"

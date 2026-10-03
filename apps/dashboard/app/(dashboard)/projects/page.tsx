@@ -297,6 +297,8 @@ export default function ProjectsPage() {
         status: form.status,
         progress: 0,
         dueDate: toIso(form.dueDate),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         openTasksCount: validSubtasks.length,
         ownerId: form.ownerId,
         ownerName,
@@ -310,6 +312,9 @@ export default function ProjectsPage() {
           assigneeName: members.find((m) => m.id === st.assigneeId)?.name ?? null,
         })),
         activities: [],
+        documents: [],
+        reports: [],
+        insights: [],
       };
 
       setProjects((prev) => [optimisticProject, ...prev]);

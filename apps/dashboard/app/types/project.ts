@@ -24,6 +24,37 @@ export interface ProjectActivity {
   type: "status" | "comment" | "task" | "milestone";
 }
 
+export interface ProjectDocument {
+  id: string;
+  fileName: string;
+  fileSize: string;
+  fileUrl: string;
+  mimeType?: string | null;
+  processingStatus: "PENDING" | "PROCESSED" | "FAILED";
+  extractedEntitiesCount?: number;
+  failureReason?: string | null;
+  createdAt: string;
+}
+
+export interface ProjectReport {
+  id: string;
+  title: string;
+  type: string;
+  size: string;
+  status: "READY" | "PROCESSING" | "FAILED";
+  fileUrl?: string | null;
+  createdAt: string;
+}
+
+export interface ProjectInsight {
+  id: string;
+  title: string;
+  type: string;
+  severity: string;
+  recommendedAction?: string;
+  createdAt: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -33,6 +64,10 @@ export interface Project {
   progress: number;
   /** ISO 8601 date-time string */
   dueDate: string;
+  /** ISO 8601 date-time string */
+  createdAt: string;
+  /** ISO 8601 date-time string */
+  updatedAt: string;
   openTasksCount: number;
   ownerId: string;
   ownerName: string;
@@ -40,6 +75,9 @@ export interface Project {
   ownerInitials?: string;
   tasks: TaskItem[];
   activities?: ProjectActivity[];
+  documents?: ProjectDocument[];
+  reports?: ProjectReport[];
+  insights?: ProjectInsight[];
 }
 
 /** Derive two-letter initials from a full name */

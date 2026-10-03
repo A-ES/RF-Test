@@ -20,6 +20,32 @@ function isValidIso(s: string): boolean {
   return !isNaN(new Date(s).getTime());
 }
 
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+): Promise<Response> {
+  const session = await getSession();
+  if (!session) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+  if (!id) {
+    return Response.json({ error: "Project ID is required" }, { status: 400 });
+  }
+
+  const project = await prisma.project.findFirst({
+    where: { id, organizationId: session.organizationId },
+    select: PROJECT_SELECT,
+  });
+
+  if (!project) {
+    return Response.json({ error: "Project not found" }, { status: 404 });
+  }
+
+  return Response.json({ project: serializeProject(project) });
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

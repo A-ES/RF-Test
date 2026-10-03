@@ -166,6 +166,9 @@ export async function PATCH(
     });
   });
 
+  const { invalidateDashboardCache } = await import("@/app/api/dashboard/route");
+  invalidateDashboardCache(session.organizationId);
+
   return Response.json({ project: serializeProject(updatedProject!) });
 }
 
@@ -235,6 +238,9 @@ export async function DELETE(
       select: PROJECT_SELECT,
     });
   });
+
+  const { invalidateDashboardCache } = await import("@/app/api/dashboard/route");
+  invalidateDashboardCache(session.organizationId);
 
   return Response.json({ project: serializeProject(updatedProject!) });
 }

@@ -1,10 +1,13 @@
 "use client";
 
 import * as React from "react";
-import type { DashboardData } from "@/app/types/dashboard";
+import type { DashboardData, AIProcessStats, PendingActionStats } from "@/app/types/dashboard";
 import { ProjectStatusBars } from "./ProjectStatusBars";
-import { AcceptanceGauge } from "./AcceptanceGauge";
+import { AITasksProcessesCard } from "./AITasksProcessesCard";
 import { InsightsSparkline } from "./InsightsSparkline";
+import { PendingActionsCard } from "./PendingActionsCard";
+import { RecentActivityCard } from "./RecentActivityCard";
+import { AcceptanceGauge } from "./AcceptanceGauge";
 import { ConversationsMini } from "./ConversationsMini";
 import { TeamRoleDonut } from "./TeamRoleDonut";
 import {
@@ -55,7 +58,7 @@ export function BentoChartsGrid({ data, onRetry }: BentoChartsGridProps) {
   const errors = data.errors;
   const countErrors = errors?.counts;
 
-  // Find metric cards by id
+  // Find metric cards by id (truthful fallbacks: 0 instead of 94%)
   const projectCard = data.metricCards.find((c) => c.id === "mc_projects") ?? {
     rawValue: data.projects.length,
     delta: "0",
@@ -63,11 +66,11 @@ export function BentoChartsGrid({ data, onRetry }: BentoChartsGridProps) {
     period: "vs last month",
   };
 
-  const renewalCard = data.metricCards.find((c) => c.id === "mc_renewal") ?? {
-    rawValue: 94,
-    delta: "0%",
+  const aiCard = data.metricCards.find((c) => c.id === "mc_ai_processes") ?? {
+    rawValue: data.aiProcessStats?.total ?? 0,
+    delta: "+0",
     deltaValue: 0,
-    period: "this quarter",
+    period: "active in pipeline",
   };
 
   const insightsCard = data.metricCards.find((c) => c.id === "mc_insights") ?? {
@@ -75,6 +78,20 @@ export function BentoChartsGrid({ data, onRetry }: BentoChartsGridProps) {
     delta: "+0",
     deltaValue: 0,
     period: "last 30 days",
+  };
+
+  const pendingCard = data.metricCards.find((c) => c.id === "mc_pending_actions") ?? {
+    rawValue: data.pendingActionStats?.total ?? 0,
+    delta: "0",
+    deltaValue: 0,
+    period: "requiring review",
+  };
+
+  const renewalCard = data.metricCards.find((c) => c.id === "mc_renewal") ?? {
+    rawValue: 0,
+    delta: "0%",
+    deltaValue: 0,
+    period: "this quarter",
   };
 
   const convCard = data.metricCards.find((c) => c.id === "mc_conversations") ?? {
@@ -85,38 +102,60 @@ export function BentoChartsGrid({ data, onRetry }: BentoChartsGridProps) {
   };
 
   const teamCard = data.metricCards.find((c) => c.id === "mc_team") ?? {
-    rawValue: 8,
+    rawValue: data.teamRoles?.total ?? 0,
     delta: "0",
     deltaValue: 0,
     period: "in this workspace",
   };
 
-  // Derive visual breakdowns using typed selectors
+  // Derive visual breakdowns using typed database selectors or fallback helpers
   const projectCounts = React.useMemo(
-    () => deriveProjectStatusCounts(data.projects, projectCard.rawValue),
-    [data.projects, projectCard.rawValue]
+    () => deriveProjectStatusCounts(data.projects, projectCard.rawValue, data.projectStatusCounts),
+    [data.projects, projectCard.rawValue, data.projectStatusCounts]
   );
 
+  const aiProcessStats: AIProcessStats = data.aiProcessStats ?? {
+    queued: 0,
+    processing: 0,
+    activeConversations: 0,
+    active: 0,
+    completed: 0,
+    failed: 0,
+    total: aiCard.rawValue,
+  };
+
+  const pendingActionStats: PendingActionStats = data.pendingActionStats ?? {
+    actionableTasks: 0,
+    reviewSignals: data.unreadInsightCount ?? 0,
+    total: pendingCard.rawValue,
+    openTasks: 0,
+    unreadInsights: data.unreadInsightCount ?? 0,
+    escalations: 0,
+    atRiskProjects: 0,
+  };
+
+  const recentActivities = data.recentActivities ?? [];
+
   const convHistory = React.useMemo(
-    () => deriveConversationsHistory(data.recentConversations, convCard.rawValue),
-    [data.recentConversations, convCard.rawValue]
+    () => deriveConversationsHistory(data.recentConversations, convCard.rawValue, data.conversationHistory),
+    [data.recentConversations, convCard.rawValue, data.conversationHistory]
   );
 
   const insightsHistory = React.useMemo(
-    () => deriveInsightsHistory(data.insights, insightsCard.rawValue),
-    [data.insights, insightsCard.rawValue]
+    () => deriveInsightsHistory(data.insights, insightsCard.rawValue, data.insightHistory),
+    [data.insights, insightsCard.rawValue, data.insightHistory]
   );
 
   const teamRoles = React.useMemo(
-    () => deriveTeamRoles(teamCard.rawValue),
-    [teamCard.rawValue]
+    () => deriveTeamRoles(teamCard.rawValue, data.teamRoles),
+    [teamCard.rawValue, data.teamRoles]
   );
 
   return (
-    <section aria-label="Key Performance Indicators" className="w-full space-y-6">
-      {/* 12-column Bento Grid */}
+    <section aria-label="Dashboard Overview" className="w-full space-y-8">
+      {/* Primary Information Architecture (Client Requirements 1–5) */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-        {/* Row 1: Active Projects (wide: 8 cols) + Acceptance Rate (4 cols) */}
+        {/* Requirement 1: Active Projects (8 cols) */}
         <div className="md:col-span-7 lg:col-span-8 min-h-[260px]">
           {errors?.projects || countErrors?.projects ? (
             <SectionErrorFallback title="Active Projects" onRetry={onRetry} />
@@ -130,25 +169,27 @@ export function BentoChartsGrid({ data, onRetry }: BentoChartsGridProps) {
           )}
         </div>
 
+        {/* Requirement 2: AI Tasks / Processes (4 cols) */}
         <div className="md:col-span-5 lg:col-span-4 min-h-[260px]">
-          {countErrors?.renewal ? (
-            <SectionErrorFallback title="Acceptance Rate" onRetry={onRetry} />
+          {countErrors?.aiProcesses ? (
+            <SectionErrorFallback title="AI Tasks / Processes" onRetry={onRetry} />
           ) : (
-            <AcceptanceGauge
-              rate={renewalCard.rawValue}
-              delta={renewalCard.delta}
-              deltaValue={renewalCard.deltaValue}
-              period={renewalCard.period}
+            <AITasksProcessesCard
+              stats={aiProcessStats}
+              delta={aiCard.delta}
+              deltaValue={aiCard.deltaValue}
+              period={aiCard.period}
             />
           )}
         </div>
 
-        {/* Row 2: AI Insights (wide: 5 cols) + Open Conversations (4 cols) + Team Members (3 cols) */}
-        <div className="md:col-span-12 lg:col-span-5 min-h-[240px]">
+        {/* Requirement 3: Insights Generated (4 cols) */}
+        <div className="md:col-span-12 lg:col-span-4 min-h-[240px]">
           {errors?.insights || countErrors?.insights ? (
-            <SectionErrorFallback title="AI Insights" onRetry={onRetry} />
+            <SectionErrorFallback title="Insights Generated" onRetry={onRetry} />
           ) : (
             <InsightsSparkline
+              title="Insights Generated"
               total={insightsCard.rawValue}
               delta={insightsCard.delta}
               deltaValue={insightsCard.deltaValue}
@@ -158,31 +199,85 @@ export function BentoChartsGrid({ data, onRetry }: BentoChartsGridProps) {
           )}
         </div>
 
+        {/* Requirement 4: Pending Actions (4 cols) */}
         <div className="md:col-span-6 lg:col-span-4 min-h-[240px]">
-          {errors?.conversations || countErrors?.conversations ? (
-            <SectionErrorFallback title="Open Conversations" onRetry={onRetry} />
+          {countErrors?.pendingActions ? (
+            <SectionErrorFallback title="Pending Actions" onRetry={onRetry} />
           ) : (
-            <ConversationsMini
-              total={convCard.rawValue}
-              delta={convCard.delta}
-              deltaValue={convCard.deltaValue}
-              period={convCard.period}
-              history={convHistory}
+            <PendingActionsCard
+              stats={pendingActionStats}
+              delta={pendingCard.delta}
+              deltaValue={pendingCard.deltaValue}
+              period={pendingCard.period}
             />
           )}
         </div>
 
-        <div className="md:col-span-6 lg:col-span-3 min-h-[240px]">
-          {countErrors?.team ? (
-            <SectionErrorFallback title="Team Breakdown" onRetry={onRetry} />
+        {/* Requirement 5: Recent Activity (4 cols) */}
+        <div className="md:col-span-6 lg:col-span-4 min-h-[240px]">
+          {errors?.activities ? (
+            <SectionErrorFallback title="Recent Activity" onRetry={onRetry} />
           ) : (
-            <TeamRoleDonut
-              roles={teamRoles}
-              delta={teamCard.delta}
-              deltaValue={teamCard.deltaValue}
-              period={teamCard.period}
+            <RecentActivityCard
+              activities={recentActivities}
+              period="in workspace"
             />
           )}
+        </div>
+      </div>
+
+      {/* Secondary Operations Metrics (Acceptance Rate, Conversations, Team) */}
+      <div className="space-y-4 pt-4 border-t border-white/10">
+        <div>
+          <p className="dash-eyebrow">/ telemetry</p>
+          <h3 className="mt-0.5 text-xs font-mono font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Workspace Operations
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+          {/* Secondary 1: Acceptance Rate (4 cols) */}
+          <div className="md:col-span-12 lg:col-span-4 min-h-[240px]">
+            {countErrors?.renewal ? (
+              <SectionErrorFallback title="Acceptance Rate" onRetry={onRetry} />
+            ) : (
+              <AcceptanceGauge
+                rate={renewalCard.rawValue}
+                delta={renewalCard.delta}
+                deltaValue={renewalCard.deltaValue}
+                period={renewalCard.period}
+              />
+            )}
+          </div>
+
+          {/* Secondary 2: Open Conversations (4 cols) */}
+          <div className="md:col-span-6 lg:col-span-4 min-h-[240px]">
+            {errors?.conversations || countErrors?.conversations ? (
+              <SectionErrorFallback title="Open Conversations" onRetry={onRetry} />
+            ) : (
+              <ConversationsMini
+                total={convCard.rawValue}
+                delta={convCard.delta}
+                deltaValue={convCard.deltaValue}
+                period={convCard.period}
+                history={convHistory}
+              />
+            )}
+          </div>
+
+          {/* Secondary 3: Team Members (4 cols) */}
+          <div className="md:col-span-6 lg:col-span-4 min-h-[240px]">
+            {countErrors?.team ? (
+              <SectionErrorFallback title="Team Breakdown" onRetry={onRetry} />
+            ) : (
+              <TeamRoleDonut
+                roles={teamRoles}
+                delta={teamCard.delta}
+                deltaValue={teamCard.deltaValue}
+                period={teamCard.period}
+              />
+            )}
+          </div>
         </div>
       </div>
     </section>

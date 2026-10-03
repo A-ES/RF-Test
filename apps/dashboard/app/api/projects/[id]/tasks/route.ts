@@ -124,5 +124,8 @@ export async function POST(
     });
   });
 
+  const { invalidateDashboardCache } = await import("@/app/api/dashboard/route");
+  invalidateDashboardCache(session.organizationId);
+
   return Response.json({ project: serializeProject(updatedProject!) }, { status: 201 });
 }
