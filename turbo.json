@@ -3,6 +3,16 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": [
+        "RF_APP",
+        "DATABASE_URL",
+        "DATABASE_URL_LOCAL",
+        "ADMIN_DATABASE_URL",
+        "ADMIN_DATABASE_URL_LOCAL",
+        "RF_ADMIN_SESSION_SECRET",
+        "RF_ADMIN_MFA_ENCRYPTION_KEY",
+        "ENABLE_EXPERIMENTAL_COREPACK"
+      ],
       "outputs": [".next/**", "dist/**"]
     },
     "dev": {
