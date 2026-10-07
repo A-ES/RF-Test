@@ -2,7 +2,7 @@
   "name": "rf-intelligence-monorepo",
   "version": "0.0.0",
   "engines": {
-    "node": "20.x"
+    "node": ">=22.x"
   },
   "scripts": {
     "preinstall": "node -e \"if(process.env.VERCEL){try{require('fs').rmSync('node_modules',{recursive:true,force:true})}catch(e){}}\"",
