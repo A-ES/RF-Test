@@ -1,5 +1,0 @@
-{
-  "framework": "nextjs",
-  "installCommand": "cd ../.. && npx pnpm@9.15.4 install",
-  "buildCommand": "cd ../.. && pnpm --filter rf-intelligence build"
-}
