@@ -11,6 +11,7 @@
         "ADMIN_DATABASE_URL_LOCAL",
         "RF_ADMIN_SESSION_SECRET",
         "RF_ADMIN_MFA_ENCRYPTION_KEY",
+        "ADMIN_IP_ALLOWLIST",
         "ENABLE_EXPERIMENTAL_COREPACK"
       ],
       "outputs": [".next/**", "dist/**"]
