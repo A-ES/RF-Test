@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "admin:create": "RF_APP=admin ts-node --project tsconfig.scripts.json scripts/create-admin.ts",
-    "admin:enrol-mfa": "RF_APP=admin ts-node --project tsconfig.scripts.json scripts/enrol-mfa.ts"
+    "admin:enrol-mfa": "RF_APP=admin ts-node --project tsconfig.scripts.json scripts/enrol-mfa.ts",
+    "admin:reset-password": "RF_APP=admin ts-node --project tsconfig.scripts.json scripts/reset-admin-password.ts",
+    "admin:force-mfa": "RF_APP=admin ts-node --project tsconfig.scripts.json scripts/force-mfa.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1135.0",
