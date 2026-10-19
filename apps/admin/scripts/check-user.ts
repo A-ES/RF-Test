@@ -1,3 +1,4 @@
+import "./env";
 import { prisma } from "@rf-intelligence/db";
 
 async function main() {

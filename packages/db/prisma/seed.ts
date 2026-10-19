@@ -1,10 +1,18 @@
 import { createHash, randomBytes, scrypt } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 
-const dbUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
+const dbUrl =
+  process.env.DIRECT_URL ||
+  process.env.DATABASE_URL ||
+  process.env.DATABASE_URL_LOCAL ||
+  "postgresql://postgres:password@localhost:5433/rf_intelligence_dev";
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = dbUrl;
+}
 const prisma = new PrismaClient({
-  datasources: dbUrl ? { db: { url: dbUrl } } : undefined,
+  datasources: { db: { url: dbUrl } },
 });
+
 
 /**
  * Mirrors `hashPassword` in apps/admin/lib/password.ts.
@@ -1542,6 +1550,11 @@ async function main() {
       confidenceThreshold: 0.75,
       escalationThreshold: 0.6,
       autoReplyEnabled: true,
+      currency: "INR",
+      invoicePrefix: "INV-",
+      paymentTermsDays: 30,
+      defaultTaxBps: 1800,
+      orderApprovalNotifyEmail: "approvals@acmecorp.com",
       featureFlagsJson: JSON.stringify({
         customerConversations: true,
         autoReply: true,
@@ -1566,6 +1579,11 @@ async function main() {
       confidenceThreshold: 0.75,
       escalationThreshold: 0.6,
       autoReplyEnabled: true,
+      currency: "INR",
+      invoicePrefix: "INV-",
+      paymentTermsDays: 30,
+      defaultTaxBps: 1800,
+      orderApprovalNotifyEmail: "approvals@acmecorp.com",
       featureFlagsJson: JSON.stringify({
         customerConversations: true,
         autoReply: true,
@@ -1575,7 +1593,7 @@ async function main() {
       dataRetentionDays: 365,
     },
   });
-  console.log(`✓ Organization settings seeded for ${org.name} (AI model + escalation threshold)`);
+  console.log(`✓ Organization settings seeded for ${org.name} (AI model + escalation threshold + e-commerce)`);
 
   // 14. WhatsApp Business inbox for the demo tenant
   //
@@ -1598,6 +1616,294 @@ async function main() {
     },
   });
   console.log(`✓ WhatsApp inbox seeded for ${org.name} (phone_number_id=pnid_acme_demo)`);
+
+  // 15. Seed 12 Realistic RF Intelligence Products, Aliases, Stock, and Price Rules
+  console.log("📦 Seeding 12 Realistic Products, Stock & Pricing Rules...");
+
+  const seedProducts = [
+    {
+      sku: "ANT-5G-EXT-400",
+      name: "High-Gain 5G/LTE Directional Outdoor Panel Antenna (3300-3800 MHz, 18 dBi)",
+      description: "Ruggedized outdoor directional antenna for long-range 5G private networks and cellular backhaul.",
+      unit: "PCS",
+      basePriceMinor: 1450000, // ₹14,500.00
+      taxRateBps: 1800,
+      reorderLevel: 15,
+      onHand: 45,
+      reserved: 5,
+      aliases: ["5g outdoor antenna", "panel antenna 5g", "directional 5g panel", "ant-5g-ext"],
+    },
+    {
+      sku: "ANT-OMNI-2458",
+      name: "Dual-Band Wi-Fi 6 Heavy-Duty Marine Omni Antenna (2.4/5.8 GHz, 9 dBi)",
+      description: "Fiberglass omnidirectional antenna with N-Female connector, designed for maritime and harsh industrial deployment.",
+      unit: "PCS",
+      basePriceMinor: 480000, // ₹4,800.00
+      taxRateBps: 1800,
+      reorderLevel: 25,
+      onHand: 80,
+      reserved: 0,
+      aliases: ["omni antenna", "wifi omni", "marine antenna", "ant-omni"],
+    },
+    {
+      sku: "CAB-LMR400-10M",
+      name: "Low-Loss LMR-400 Coaxial Cable Assembly 10m (N-Male to N-Male)",
+      description: "Ultra-low loss double shielded 50-ohm RF jumper cable with weatherproof heat-shrink boots.",
+      unit: "PCS",
+      basePriceMinor: 220000, // ₹2,200.00
+      taxRateBps: 1800,
+      reorderLevel: 30,
+      onHand: 110,
+      reserved: 10,
+      aliases: ["lmr400 10m", "coaxial cable 10m", "lmr-400 cable", "lmr400 cable"],
+    },
+    {
+      sku: "CAB-LMR240-05M",
+      name: "Flexible LMR-240 Pigtail Jumper Cable 5m (SMA-Male to N-Male)",
+      description: "Flexible indoor/outdoor jumper for radio cabinet routing and tight-radius rack connections.",
+      unit: "PCS",
+      basePriceMinor: 115000, // ₹1,150.00
+      taxRateBps: 1800,
+      reorderLevel: 40,
+      onHand: 150,
+      reserved: 0,
+      aliases: ["lmr240 jumper", "sma to n cable", "5m jumper", "lmr240 cable"],
+    },
+    {
+      sku: "CON-NM-CRIMP",
+      name: "Precision N-Type Male Crimp Connector for LMR-400 (50 Ohm, Gold Pin)",
+      description: "Mil-spec nickel-plated brass N male plug with gold-plated center pin and captive contact.",
+      unit: "PCS",
+      basePriceMinor: 35000, // ₹350.00
+      taxRateBps: 1800,
+      reorderLevel: 100,
+      onHand: 400,
+      reserved: 20,
+      aliases: ["n male connector", "lmr400 connector", "n-type crimp", "n connector"],
+    },
+    {
+      sku: "CON-SMA-MALE",
+      name: "Gold-Plated SMA Male Solder/Crimp RF Connector (18 GHz)",
+      description: "Precision 50-ohm SMA male plug rated up to 18 GHz with low VSWR.",
+      unit: "PCS",
+      basePriceMinor: 18000, // ₹180.00
+      taxRateBps: 1800,
+      reorderLevel: 100,
+      onHand: 500,
+      reserved: 0,
+      aliases: ["sma connector", "sma male plug", "sma plug"],
+    },
+    {
+      sku: "ATT-20DB-50W",
+      name: "High-Power RF Coaxial Attenuator 20dB (DC-6 GHz, 50W, N-Female to N-Male)",
+      description: "Precision bidirectional RF power pad with finned aluminum heat sink for transmitter protection.",
+      unit: "PCS",
+      basePriceMinor: 890000, // ₹8,900.00
+      taxRateBps: 1800,
+      reorderLevel: 10,
+      onHand: 28,
+      reserved: 2,
+      aliases: ["20db attenuator", "rf attenuator 50w", "coaxial attenuator", "attenuator 20db"],
+    },
+    {
+      sku: "SPLIT-2WAY-N",
+      name: "2-Way Wilkinson Power Divider / Splitter (698-2700 MHz, 50W, N-Female)",
+      description: "Low insertion loss cavity power splitter for in-building DAS and repeater feed lines.",
+      unit: "PCS",
+      basePriceMinor: 360000, // ₹3,600.00
+      taxRateBps: 1800,
+      reorderLevel: 20,
+      onHand: 60,
+      reserved: 0,
+      aliases: ["2 way splitter", "rf power divider", "wilkinson splitter", "power splitter"],
+    },
+    {
+      sku: "PROT-SURGE-N",
+      name: "Coaxial Gas Discharge Tube Lightning Surge Protector (DC-3 GHz, N-Jack)",
+      description: "Quarter-wave gas tube surge arrester with replaceable capsule and ground lug.",
+      unit: "PCS",
+      basePriceMinor: 275000, // ₹2,750.00
+      taxRateBps: 1800,
+      reorderLevel: 25,
+      onHand: 75,
+      reserved: 5,
+      aliases: ["surge protector", "lightning arrestor", "rf surge arrester", "surge arrester"],
+    },
+    {
+      sku: "ENC-IP67-DIECAST",
+      name: "Weatherproof Die-Cast Aluminum RF Shielded Enclosure IP67 (220x120x80mm)",
+      description: "NEMA 4X / IP67 enclosure with conductive silicone EMI gasket and pre-drilled N-connector knockouts.",
+      unit: "PCS",
+      basePriceMinor: 520000, // ₹5,200.00
+      taxRateBps: 1800,
+      reorderLevel: 15,
+      onHand: 35,
+      reserved: 0,
+      aliases: ["diecast enclosure", "ip67 box", "rf enclosure", "shielded box", "enclosure"],
+    },
+    {
+      sku: "MNT-MAST-CLAMP",
+      name: "Heavy-Duty Galvanized Steel Universal Pole & Mast Mounting Bracket Kit",
+      description: "V-bolt clamp kit fits 25mm to 65mm outer diameter antenna masts and tower legs.",
+      unit: "SET",
+      basePriceMinor: 185000, // ₹1,850.00
+      taxRateBps: 1800,
+      reorderLevel: 30,
+      onHand: 90,
+      reserved: 0,
+      aliases: ["mast clamp", "pole bracket", "mounting kit", "antenna bracket", "mast bracket"],
+    },
+    {
+      sku: "MOD-PA-20W",
+      name: "GaN High Efficiency RF Power Amplifier Module (2.4-2.5 GHz, 20W / 43 dBm)",
+      description: "Compact gallium-nitride linear power amplifier module with built-in temperature compensation.",
+      unit: "PCS",
+      basePriceMinor: 3200000, // ₹32,000.00
+      taxRateBps: 1800,
+      reorderLevel: 8,
+      onHand: 18,
+      reserved: 3,
+      aliases: ["gan amplifier", "rf power amp", "20w power amplifier", "power amplifier"],
+    },
+  ];
+
+  const createdProducts: Record<string, string> = {};
+
+  for (const p of seedProducts) {
+    const product = await prisma.product.create({
+      data: {
+        organizationId: org.id,
+        sku: p.sku,
+        name: p.name,
+        description: p.description,
+        unit: p.unit,
+        basePriceMinor: p.basePriceMinor,
+        taxRateBps: p.taxRateBps,
+        reorderLevel: p.reorderLevel,
+        isActive: true,
+      },
+    });
+
+    createdProducts[p.sku] = product.id;
+
+    // Create lowercased aliases
+    for (const alias of p.aliases) {
+      await prisma.productAlias.create({
+        data: {
+          organizationId: org.id,
+          productId: product.id,
+          alias: alias.toLowerCase().trim(),
+        },
+      });
+    }
+
+    // Create InventoryLevel
+    await prisma.inventoryLevel.create({
+      data: {
+        organizationId: org.id,
+        productId: product.id,
+        onHand: p.onHand,
+        reserved: p.reserved,
+      },
+    });
+
+    // Create initial stock movement
+    await prisma.stockMovement.create({
+      data: {
+        organizationId: org.id,
+        productId: product.id,
+        delta: p.onHand,
+        reason: "ERP_SYNC",
+        actorId: jordan.id,
+      },
+    });
+  }
+  console.log(`✓ Seeded ${seedProducts.length} Products, Aliases, StockLevels, and Movements`);
+
+  // Customer-specific pricing rules
+  await prisma.customerPrice.createMany({
+    data: [
+      {
+        organizationId: org.id,
+        customerId: acmeCustomer.id,
+        productId: createdProducts["ANT-5G-EXT-400"]!,
+        priceMinor: 1250000, // Special price: ₹12,500.00
+      },
+      {
+        organizationId: org.id,
+        customerId: acmeCustomer.id,
+        productId: createdProducts["CAB-LMR400-10M"]!,
+        priceMinor: 190000, // Special price: ₹1,900.00
+      },
+      {
+        organizationId: org.id,
+        customerId: meridianCustomer.id,
+        productId: createdProducts["ENC-IP67-DIECAST"]!,
+        priceMinor: 450000, // Special price: ₹4,500.00
+      },
+      {
+        organizationId: org.id,
+        customerId: northstarCustomer.id,
+        productId: createdProducts["MOD-PA-20W"]!,
+        priceMinor: 2800000, // Special price: ₹28,000.00
+      },
+    ],
+  });
+  console.log("✓ Seeded CustomerPrice negotiated price rules");
+
+  // Discount rules
+  await prisma.discountRule.createMany({
+    data: [
+      {
+        organizationId: org.id,
+        scope: "ORDER",
+        type: "PERCENT",
+        value: 1000, // 10% in bps
+        minOrderMinor: 10000000, // min ₹1,00,000
+        priority: 1,
+      },
+      {
+        organizationId: org.id,
+        scope: "PRODUCT",
+        productId: createdProducts["CON-NM-CRIMP"]!,
+        type: "FIXED",
+        value: 5000, // fixed ₹50 (5,000 minor) off per unit
+        minQty: 50, // bulk 50+ units
+        priority: 2,
+      },
+      {
+        organizationId: org.id,
+        scope: "CUSTOMER",
+        customerId: meridianCustomer.id,
+        type: "PERCENT",
+        value: 500, // 5% in bps partner discount
+        priority: 3,
+      },
+    ],
+  });
+  console.log("✓ Seeded DiscountRule volume and customer discounts");
+
+  // OrgCounters for race-free sequential numbering
+  await prisma.orgCounter.createMany({
+    data: [
+      {
+        organizationId: org.id,
+        key: "ORDER",
+        nextValue: 1001,
+      },
+      {
+        organizationId: org.id,
+        key: "INVOICE",
+        nextValue: 5001,
+      },
+      {
+        organizationId: org.id,
+        key: "DRAFT",
+        nextValue: 2001,
+      },
+    ],
+  });
+  console.log("✓ Seeded OrgCounter sequence numbers (ORDER, INVOICE, DRAFT)");
 
   console.log("🎉 Database seeding completed successfully!");
 }

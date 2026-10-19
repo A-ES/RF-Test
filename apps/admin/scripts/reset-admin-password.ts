@@ -1,3 +1,4 @@
+import "./env";
 import { prisma } from "@rf-intelligence/db";
 import { hashPassword } from "../lib/password";
 

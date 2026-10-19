@@ -59,3 +59,30 @@ export interface InternalMessageNotifyEventData {
   content: string;
   topic: string;
 }
+
+// ─── Order draft creation ──────────────────────────────────────────────────────
+
+/** Fired when an inbound customer message has order intent (ORDER_REQUEST or ORDER_CHANGE). */
+export const ORDER_CREATE_DRAFT_EVENT = "order/create-draft.requested";
+
+export interface OrderCreateDraftEventData {
+  organizationId: string;
+  customerId: string;
+  conversationId: string;
+  messageId: string;
+  intent?: "ORDER_REQUEST" | "ORDER_CHANGE";
+  isNewCustomer?: boolean;
+}
+
+// ─── Order Approved Post-Approval Workflow ────────────────────────────────────
+
+/** Fired when an order is approved by an administrator to trigger post-approval tasks. */
+export const ORDER_APPROVED_EVENT = "order.approved";
+
+export interface OrderApprovedEventData {
+  orderId: string;
+  organizationId: string;
+  orderNumber?: string;
+}
+
+

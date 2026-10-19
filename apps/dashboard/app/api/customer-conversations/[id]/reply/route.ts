@@ -99,6 +99,14 @@ export async function POST(
     return json({ error: "Cannot reply to a closed conversation" }, 409);
   }
 
+  // Guard: channels not enabled for outbound agent replies
+  if (conversation.channel === "SMS" || conversation.channel === "WEB_CHAT") {
+    return json(
+      { error: `Outbound replies are not supported: channel ${conversation.channel} is not enabled` },
+      400,
+    );
+  }
+
   // ── 3. Validate body ────────────────────────────────────────────────────
   let payload: unknown;
   try {
@@ -110,6 +118,13 @@ export async function POST(
   const body = (payload ?? {}) as Record<string, unknown>;
   const text = typeof body.body === "string" ? body.body.trim() : "";
   const markResolved = body.markResolved === true;
+
+  let attachmentsJson = "[]";
+  if (body.attachments) {
+    attachmentsJson = JSON.stringify(body.attachments);
+  } else if (typeof body.attachmentsJson === "string") {
+    attachmentsJson = body.attachmentsJson;
+  }
 
   if (!text) return json({ error: "A message body is required" }, 400);
   if (text.length > MAX_BODY_LENGTH) {
@@ -134,11 +149,20 @@ export async function POST(
   // ── 5. Deliver via provider ─────────────────────────────────────────────
   const provider = messagingProviderFor(addressing.channel);
   let providerMessageId: string | undefined;
+  const attachments = Array.isArray(body.attachments)
+    ? (body.attachments as Array<{ url?: string }>)
+    : [];
+  const mediaUrl =
+    (typeof body.mediaUrl === "string" ? body.mediaUrl : null) ||
+    attachments[0]?.url ||
+    undefined;
+
   try {
     const result = await provider.sendOutbound({
       inboxIdentifier: addressing.inboxIdentifier,
       contactIdentifier: addressing.contactIdentifier,
       body: text,
+      mediaUrl,
     });
     providerMessageId = result.providerMessageId;
   } catch (err) {
@@ -155,17 +179,37 @@ export async function POST(
   const now = new Date();
   const newStatus = markResolved ? "RESOLVED" : "WAITING_FOR_CUSTOMER";
 
+  const existingMessage = providerMessageId
+    ? await prisma.customerMessage.findUnique({
+        where: {
+          organizationId_providerMessageId: {
+            organizationId: session.organizationId,
+            providerMessageId,
+          },
+        },
+      })
+    : null;
+
   const [message] = await prisma.$transaction([
-    prisma.customerMessage.create({
-      data: {
-        organizationId: session.organizationId,
-        conversationId: conversation.id,
-        sender: "EMPLOYEE",
-        body: text,
-        providerMessageId: providerMessageId ?? null,
-        createdAt: now,
-      },
-    }),
+    existingMessage
+      ? prisma.customerMessage.update({
+          where: { id: existingMessage.id },
+          data: {
+            sender: "EMPLOYEE",
+            attachmentsJson,
+          },
+        })
+      : prisma.customerMessage.create({
+          data: {
+            organizationId: session.organizationId,
+            conversationId: conversation.id,
+            sender: "EMPLOYEE",
+            body: text,
+            providerMessageId: providerMessageId ?? null,
+            attachmentsJson,
+            createdAt: now,
+          },
+        }),
     prisma.customerConversation.update({
       where: { id: conversation.id },
       data: {

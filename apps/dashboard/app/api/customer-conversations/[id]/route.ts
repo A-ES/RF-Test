@@ -98,7 +98,33 @@ export async function GET(
           body: true,
           confidenceScore: true,
           providerMessageId: true,
+          attachmentsJson: true,
           createdAt: true,
+        },
+      },
+      orders: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          draftNumber: true,
+          orderNumber: true,
+          status: true,
+          totalMinor: true,
+          subtotalMinor: true,
+          taxMinor: true,
+          currency: true,
+          flagsJson: true,
+          createdAt: true,
+          lines: {
+            select: {
+              id: true,
+              sku: true,
+              rawText: true,
+              qty: true,
+              unitPriceMinor: true,
+              lineTotalMinor: true,
+            },
+          },
         },
       },
     },
@@ -109,6 +135,23 @@ export async function GET(
   if (!canAccess(session, conversation.assignedEmployeeId)) {
     return json({ error: "Forbidden" }, 403);
   }
+
+  // Mark conversation as read for this user
+  await prisma.conversationRead.upsert({
+    where: {
+      conversationId_userId: {
+        conversationId: id,
+        userId: session.userId,
+      },
+    },
+    update: { lastReadAt: new Date() },
+    create: {
+      organizationId: session.organizationId,
+      conversationId: id,
+      userId: session.userId,
+      lastReadAt: new Date(),
+    },
+  }).catch(() => {});
 
   return json({ conversation });
 }
@@ -173,6 +216,25 @@ export async function PATCH(
     ...(newStatus === "CLOSED" ? { closedAt: now } : {}),
   };
 
+  // Handle employee assignment
+  if (body.assignedEmployeeId !== undefined) {
+    if (body.assignedEmployeeId === null || body.assignedEmployeeId === "") {
+      updateData.assignedEmployeeId = null;
+    } else if (typeof body.assignedEmployeeId === "string") {
+      const candidate = await prisma.user.findFirst({
+        where: {
+          id: body.assignedEmployeeId,
+          organizationId: session.organizationId,
+          role: { in: ["ADMIN", "CLIENT_ADMIN", "CLIENT_EMPLOYEE"] },
+        },
+      });
+      if (!candidate) {
+        return json({ error: "Ineligible or non-existent employee" }, 400);
+      }
+      updateData.assignedEmployeeId = candidate.id;
+    }
+  }
+
   if (Object.keys(updateData).length === 0) {
     return json({ error: "No valid fields to update" }, 400);
   }
@@ -180,7 +242,15 @@ export async function PATCH(
   const updated = await prisma.customerConversation.update({
     where: { id },
     data: updateData,
-    select: { id: true, status: true, priority: true, resolvedAt: true, closedAt: true },
+    select: {
+      id: true,
+      status: true,
+      priority: true,
+      resolvedAt: true,
+      closedAt: true,
+      assignedEmployeeId: true,
+      assignedEmployee: { select: { id: true, name: true, role: true } },
+    },
   });
 
   await writeAuditLog({

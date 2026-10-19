@@ -48,6 +48,7 @@ export async function createOrgTokenRequest(
   const rest = getRestClient();
   const messagesChannel = orgChannel(organizationId, "messages");
   const notificationsChannel = orgChannel(organizationId, "notifications");
+  const ordersChannel = orgChannel(organizationId, "orders");
   // Always request a fresh tokenRequest with unique nonce to prevent Ably 40105 replay errors.
   // Explicitly authorize authorized tenant channels with no wildcards.
   return rest.auth.createTokenRequest({
@@ -55,6 +56,7 @@ export async function createOrgTokenRequest(
     capability: JSON.stringify({
       [messagesChannel]: ["subscribe", "publish"],
       [notificationsChannel]: ["subscribe"],
+      [ordersChannel]: ["subscribe", "publish"],
     }),
   });
 }

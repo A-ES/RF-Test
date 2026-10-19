@@ -1,52 +1,91 @@
 /**
- * In-memory fixed-window rate limiter.
- *
- * This is sufficient for a single-instance/demo deployment. For horizontally
- * scaled/serverless production use, back this with a shared store (e.g. Redis /
- * Upstash) using the same `rateLimit` contract.
+ * In-memory sliding window rate limiter for webhooks and order mutations.
+ * Returns 429 Too Many Requests with standard rate limit headers when limit exceeded.
  */
+
+interface RateLimitRecord {
+  count: number;
+  resetAt: number;
+}
+
+const memoryStore = new Map<string, RateLimitRecord>();
+
+// Periodic cleanup of expired records every 5 minutes
+if (typeof setInterval !== "undefined") {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, record] of memoryStore.entries()) {
+      if (record.resetAt <= now) {
+        memoryStore.delete(key);
+      }
+    }
+  }, 5 * 60 * 1000);
+}
+
+export function resetRateLimit(): void {
+  memoryStore.clear();
+}
 
 export interface RateLimitResult {
   allowed: boolean;
+  limit: number;
   remaining: number;
-  retryAfterSeconds: number;
+  reset: number;
 }
 
-const buckets = new Map<string, number[]>();
-
-export function rateLimit(
-  key: string,
-  limit = 10,
+export function checkRateLimit(
+  identifier: string,
+  limit = 60,
   windowMs = 60_000,
-  now: number = Date.now(),
 ): RateLimitResult {
-  const cutoff = now - windowMs;
-  const hits = (buckets.get(key) ?? []).filter((timestamp) => timestamp > cutoff);
+  const now = Date.now();
+  const existing = memoryStore.get(identifier);
 
-  if (hits.length >= limit) {
-    buckets.set(key, hits);
-    const retryAfterMs = hits[0] + windowMs - now;
+  if (!existing || existing.resetAt <= now) {
+    const record: RateLimitRecord = {
+      count: 1,
+      resetAt: now + windowMs,
+    };
+    memoryStore.set(identifier, record);
     return {
-      allowed: false,
-      remaining: 0,
-      retryAfterSeconds: Math.max(1, Math.ceil(retryAfterMs / 1000)),
+      allowed: true,
+      limit,
+      remaining: limit - 1,
+      reset: Math.ceil(record.resetAt / 1000),
     };
   }
 
-  hits.push(now);
-  buckets.set(key, hits);
+  existing.count += 1;
+  const remaining = Math.max(0, limit - existing.count);
+  const allowed = existing.count <= limit;
 
   return {
-    allowed: true,
-    remaining: limit - hits.length,
-    retryAfterSeconds: 0,
+    allowed,
+    limit,
+    remaining,
+    reset: Math.ceil(existing.resetAt / 1000),
   };
 }
 
-export function resetRateLimit(key?: string): void {
-  if (key === undefined) {
-    buckets.clear();
-    return;
-  }
-  buckets.delete(key);
+export function rateLimit(
+  identifier: string,
+  limit = 60,
+  windowMs = 60_000,
+): { allowed: boolean; retryAfterSeconds: number; limit: number; remaining: number } {
+  const res = checkRateLimit(identifier, limit, windowMs);
+  return {
+    allowed: res.allowed,
+    retryAfterSeconds: Math.max(1, res.reset - Math.ceil(Date.now() / 1000)),
+    limit: res.limit,
+    remaining: res.remaining,
+  };
+}
+
+export function createRateLimitHeaders(res: RateLimitResult): HeadersInit {
+  return {
+    "X-RateLimit-Limit": String(res.limit),
+    "X-RateLimit-Remaining": String(res.remaining),
+    "X-RateLimit-Reset": String(res.reset),
+    ...(res.allowed ? {} : { "Retry-After": String(Math.max(1, res.reset - Math.ceil(Date.now() / 1000))) }),
+  };
 }

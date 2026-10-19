@@ -51,6 +51,7 @@ const VALID_CHANNELS = new Set<CustomerConversationChannel>([
   "EMAIL",
   "WEB_CHAT",
   "SMS",
+  "DEMO",
 ]);
 
 export async function GET(request: Request): Promise<Response> {
@@ -73,9 +74,11 @@ export async function GET(request: Request): Promise<Response> {
       ? (rawChannel as CustomerConversationChannel)
       : undefined;
 
+  const cursor = url.searchParams.get("cursor")?.trim();
+
   const isEmployee = session.role === "CLIENT_EMPLOYEE";
 
-  const conversations = await prisma.customerConversation.findMany({
+  const rows = await prisma.customerConversation.findMany({
     where: {
       organizationId: session.organizationId,
       ...(isEmployee ? { assignedEmployeeId: session.userId } : {}),
@@ -92,7 +95,8 @@ export async function GET(request: Request): Promise<Response> {
         : {}),
     },
     orderBy: { lastMessageAt: "desc" },
-    take: limit,
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     select: {
       id: true,
       channel: true,
@@ -103,7 +107,7 @@ export async function GET(request: Request): Promise<Response> {
       lastMessagePreview: true,
       escalationReason: true,
       assignedEmployeeId: true,
-      assignedEmployee: { select: { id: true, name: true } },
+      assignedEmployee: { select: { id: true, name: true, role: true } },
       customer: {
         select: {
           id: true,
@@ -115,8 +119,42 @@ export async function GET(request: Request): Promise<Response> {
           status: true,
         },
       },
+      reads: {
+        where: { userId: session.userId },
+        select: { lastReadAt: true },
+      },
+      messages: {
+        where: { sender: "CUSTOMER" },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: { id: true, createdAt: true },
+      },
     },
   });
 
-  return json({ conversations });
+  const hasMore = rows.length > limit;
+  const list = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? list[list.length - 1]?.id ?? null : null;
+
+  const conversations = list.map((c) => {
+    const lastReadAt = c.reads[0]?.lastReadAt ? new Date(c.reads[0].lastReadAt) : new Date(0);
+    const unreadCount = c.messages.filter((m) => m.createdAt > lastReadAt).length;
+
+    return {
+      id: c.id,
+      channel: c.channel,
+      status: c.status,
+      priority: c.priority,
+      subject: c.subject,
+      lastMessageAt: c.lastMessageAt.toISOString(),
+      lastMessagePreview: c.lastMessagePreview,
+      escalationReason: c.escalationReason,
+      assignedEmployeeId: c.assignedEmployeeId,
+      assignedEmployee: c.assignedEmployee,
+      customer: c.customer,
+      unreadCount,
+    };
+  });
+
+  return json({ conversations, nextCursor });
 }

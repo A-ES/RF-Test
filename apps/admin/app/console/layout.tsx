@@ -135,6 +135,14 @@ export default async function ConsoleLayout({
               {session.email}
             </span>
           </div>
+          <Link
+            href="/console/settings"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors hover:bg-white/[0.05]"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            <Settings className="size-3" aria-hidden="true" />
+            Account Settings
+          </Link>
           <form action="/api/auth/logout" method="post">
             <button
               type="submit"

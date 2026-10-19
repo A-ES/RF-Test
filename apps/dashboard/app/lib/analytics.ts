@@ -18,7 +18,14 @@ export type AnalyticsEventType =
   | "ask_rf_query_asked"
   | "customer_conversation_escalated"
   | "customer_conversation_resolved"
-  | "document_uploaded";
+  | "document_uploaded"
+  | "order_created"
+  | "order_approved"
+  | "order_rejected"
+  | "order_invoiced"
+  | "order_paid"
+  | "order_fulfilled"
+  | "order_cancelled";
 
 export interface AnalyticsEvent {
   event: AnalyticsEventType;

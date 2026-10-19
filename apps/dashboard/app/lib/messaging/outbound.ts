@@ -44,10 +44,16 @@ export async function resolveOutboundAddressing(
   // 1. Inbox identifier — look up the org's registered provider address
   // ------------------------------------------------------------------
   const providerKind = channelToProviderKind(channel);
-  const inbox = await prisma.messagingInbox.findFirst({
+  let inbox = await prisma.messagingInbox.findFirst({
     where: { organizationId, provider: providerKind },
     select: { externalAddress: true },
   });
+
+  if (!inbox && channel === "DEMO") {
+    const { ensureDemoInbox } = await import("@/app/lib/messaging/demo");
+    const createdInbox = await ensureDemoInbox(organizationId);
+    inbox = { externalAddress: createdInbox.externalAddress };
+  }
 
   if (!inbox) {
     throw new Error(
@@ -77,12 +83,14 @@ export async function resolveOutboundAddressing(
 
 function channelToProviderKind(
   channel: CustomerConversationChannel,
-): "WHATSAPP" | "EMAIL" {
+): "WHATSAPP" | "EMAIL" | "DEMO" {
   switch (channel) {
     case "WHATSAPP":
       return "WHATSAPP";
     case "EMAIL":
       return "EMAIL";
+    case "DEMO":
+      return "DEMO";
     default:
       // WEB_CHAT / SMS — no provider-kind mapping yet
       throw new Error(`Outbound delivery is not supported for channel ${channel}`);
@@ -98,6 +106,8 @@ function resolveContactIdentifier(
       return customer.whatsapp ?? customer.phone ?? null;
     case "EMAIL":
       return customer.email ?? null;
+    case "DEMO":
+      return customer.phone ?? customer.whatsapp ?? customer.email ?? "+15550000000";
     default:
       return null;
   }

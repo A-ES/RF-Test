@@ -11,6 +11,7 @@
  * for non-interactive use. It is never passed as an argument, so it does not
  * land in shell history.
  */
+import "./env";
 import { randomBytes } from "node:crypto";
 import { prisma } from "@rf-intelligence/db";
 import { hashPassword } from "../lib/password";

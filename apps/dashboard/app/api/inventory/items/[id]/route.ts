@@ -65,6 +65,94 @@ export async function GET(
   });
 
   if (!item) {
+    const product = await prisma.product.findFirst({
+      where: {
+        organizationId: session.organizationId,
+        OR: [{ id }, { sku: id }],
+      },
+      include: {
+        inventoryLevel: true,
+        stockMovements: {
+          orderBy: { createdAt: "desc" },
+          take: 50,
+          include: {
+            order: { select: { id: true, orderNumber: true, draftNumber: true } },
+          },
+        },
+      },
+    });
+
+    if (product) {
+      const defaultLoc = await prisma.inventoryLocation.findFirst({
+        where: { organizationId: session.organizationId },
+        orderBy: { code: "asc" },
+      });
+      const totalOnHand = product.inventoryLevel?.onHand ?? 0;
+      const reserved = product.inventoryLevel?.reserved ?? 0;
+      const status = computeInventoryStatus({
+        onHand: totalOnHand,
+        reorderPoint: product.reorderLevel,
+        targetStock: product.reorderLevel * 3,
+        nearestExpiry: null,
+        expiryTrackingEnabled: false,
+      });
+
+      return Response.json({
+        item: {
+          id: product.id,
+          sku: product.sku,
+          barcode: null,
+          name: product.name,
+          categoryId: null,
+          category: "RF Products",
+          unit: product.unit,
+          costPrice: Math.round(product.basePriceMinor * 0.6) / 100,
+          unitPrice: product.basePriceMinor / 100,
+          reorderPoint: product.reorderLevel,
+          targetStock: product.reorderLevel * 3,
+          expiryTrackingEnabled: false,
+          description: product.description,
+          isActive: product.isActive,
+          onHand: totalOnHand,
+          status,
+          stockValue: totalOnHand * (product.basePriceMinor / 100),
+          stockLevels: [
+            {
+              id: product.inventoryLevel?.id || `sl_${product.id}`,
+              locationId: defaultLoc?.id || "loc_main",
+              onHand: totalOnHand,
+              reserved,
+              location: {
+                id: defaultLoc?.id || "loc_main",
+                name: defaultLoc?.name || "Main Distribution Hub",
+                code: defaultLoc?.code || "MAIN",
+              },
+            },
+          ],
+          batches: [],
+          movements: product.stockMovements.map((sm) => ({
+            id: sm.id,
+            timestamp: sm.createdAt.toISOString(),
+            type:
+              sm.reason === "FULFILLMENT"
+                ? "SHIPMENT"
+                : sm.delta > 0
+                  ? "RECEIPT"
+                  : "ADJUSTMENT",
+            quantity: Math.abs(sm.delta),
+            notes: sm.order
+              ? `Order ${sm.order.orderNumber || sm.order.draftNumber || sm.order.id}`
+              : sm.reason,
+            location: {
+              name: defaultLoc?.name || "Main Distribution Hub",
+              code: defaultLoc?.code || "MAIN",
+            },
+            performedBy: null,
+          })),
+        },
+      });
+    }
+
     return Response.json({ error: "Item not found" }, { status: 404 });
   }
 

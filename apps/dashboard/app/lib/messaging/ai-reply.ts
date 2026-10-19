@@ -385,6 +385,87 @@ export async function processCustomerAiReply(
     };
   }
 
+  // ─── WhatsApp-to-Order workflow check ──────────────────────────────────────
+  if (ctx.conversation.channel === "WHATSAPP") {
+    try {
+      const { processWhatsAppOrderWorkflow } = await import(
+        "@/app/lib/orders/whatsapp-workflow"
+      );
+      const orderWorkflow = await processWhatsAppOrderWorkflow({
+        organizationId,
+        customerId: event.customerId,
+        conversationId: event.conversationId,
+        messageId: event.messageId,
+        messageBody: ctx.inbound.body,
+      });
+
+      if (orderWorkflow.orderHandled && orderWorkflow.replyMessage) {
+        const createdMsg = await prisma.customerMessage.create({
+          data: {
+            organizationId,
+            conversationId: ctx.conversation.id,
+            sender: "AI",
+            body: orderWorkflow.replyMessage,
+            confidenceScore: orderWorkflow.confidence ?? 0.9,
+          },
+          select: { id: true },
+        });
+
+        await prisma.customerConversation.updateMany({
+          where: { id: ctx.conversation.id, organizationId },
+          data: {
+            status: "WAITING_FOR_CUSTOMER",
+            lastMessageAt: new Date(),
+            lastMessagePreview: orderWorkflow.replyMessage.slice(0, 180),
+          },
+        });
+
+        const inbox = await prisma.messagingInbox.findFirst({
+          where: { organizationId, provider: "WHATSAPP" },
+          select: { externalAddress: true },
+        });
+        const contact = ctx.customer.whatsapp || ctx.customer.phone;
+
+        if (inbox && contact) {
+          try {
+            await sendOutbound("WHATSAPP", {
+              inboxIdentifier: inbox.externalAddress,
+              contactIdentifier: contact,
+              body: orderWorkflow.replyMessage,
+            });
+          } catch (err) {
+            console.error("[ai-reply] order outbound send failed", err);
+          }
+        }
+
+        await writeAuditLog({
+          organizationId,
+          action: "customer_ai.order_draft_replied",
+          entityType: "Order",
+          entityId: orderWorkflow.orderId ?? ctx.conversation.id,
+          metadata: {
+            decision: "replied",
+            orderId: orderWorkflow.orderId,
+            orderNumber: orderWorkflow.orderNumber,
+            messageId: createdMsg.id,
+          },
+        });
+
+        return {
+          decision: "replied",
+          organizationId,
+          conversationId: ctx.conversation.id,
+          reason: "order_draft_created",
+          confidence: orderWorkflow.confidence ?? 0.9,
+          assignedEmployeeId: ctx.conversation.assignedEmployeeId,
+          sent: Boolean(inbox && contact),
+        };
+      }
+    } catch (orderErr) {
+      console.error("[ai-reply] whatsapp order workflow error", orderErr);
+    }
+  }
+
   const settings = await loadSettings(organizationId);
   const groundingSufficient = isGroundingSufficient(ctx);
   const prompts = buildDraftPrompts(ctx, settings);

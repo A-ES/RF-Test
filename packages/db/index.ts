@@ -149,6 +149,21 @@ export type {
   Plan,
   Subscription,
   AdminAuditLog,
+  Product,
+  ProductAlias,
+  InventoryLevel,
+  StockMovement,
+  CustomerPrice,
+  DiscountRule,
+  Order,
+  OrderLine,
+  Invoice,
+  Payment,
+  Fulfillment,
+  OrderEvent,
+  NotificationLog,
+  OrgCounter,
+  ConversationRead,
   PrismaPromise,
 } from "@prisma/client";
 export {
@@ -172,7 +187,20 @@ export {
   MessagingProviderKind,
   BillingInterval,
   SubscriptionStatus,
+  StockMovementReason,
+  DiscountScope,
+  DiscountType,
+  OrderStatus,
+  OrderPaymentStatus,
+  InvoiceStatus,
+  PaymentStatus,
+  FulfillmentStatus,
+  OrderActorKind,
+  NotificationAudience,
+  CounterKey,
 } from "@prisma/client";
+
+export { nextNumber, formatSequenceNumber } from "./counter";
 
 /**
  * Introspects the role this process is connected as, and whether it bypasses

@@ -72,6 +72,83 @@ export async function POST(request: Request): Promise<Response> {
   });
 
   if (!item) {
+    const product = await prisma.product.findFirst({
+      where: {
+        organizationId: session.organizationId,
+        OR: [{ id: data.itemId }, { sku: data.itemId }],
+      },
+      include: { inventoryLevel: true },
+    });
+
+    if (product) {
+      let effectiveDelta = 0;
+      if (data.type === "RECEIPT" || data.type === "RETURN") {
+        effectiveDelta = data.quantity;
+      } else if (data.type === "SHIPMENT" || data.type === "WASTAGE") {
+        effectiveDelta = -data.quantity;
+      } else if (data.type === "ADJUSTMENT") {
+        effectiveDelta = data.delta !== undefined ? data.delta : data.quantity;
+      }
+
+      const currentOnHand = product.inventoryLevel?.onHand ?? 0;
+      const newOnHand = Math.max(0, currentOnHand + effectiveDelta);
+
+      await prisma.$transaction([
+        prisma.inventoryLevel.upsert({
+          where: {
+            organizationId_productId: {
+              organizationId: session.organizationId,
+              productId: product.id,
+            },
+          },
+          create: {
+            organizationId: session.organizationId,
+            productId: product.id,
+            onHand: newOnHand,
+            reserved: 0,
+          },
+          update: {
+            onHand: newOnHand,
+          },
+        }),
+        prisma.stockMovement.create({
+          data: {
+            organizationId: session.organizationId,
+            productId: product.id,
+            delta: effectiveDelta,
+            reason: "ADJUSTMENT",
+            actorId: session.userId,
+          },
+        }),
+      ]);
+
+      const status = computeInventoryStatus({
+        onHand: newOnHand,
+        reorderPoint: product.reorderLevel,
+        targetStock: product.reorderLevel * 3,
+        expiryTrackingEnabled: false,
+      });
+
+      return Response.json({
+        success: true,
+        item: {
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          onHand: newOnHand,
+          status,
+          stockLevels: [
+            {
+              locationId: data.locationId,
+              onHand: newOnHand,
+              reserved: product.inventoryLevel?.reserved ?? 0,
+              available: Math.max(0, newOnHand - (product.inventoryLevel?.reserved ?? 0)),
+            },
+          ],
+        },
+      });
+    }
+
     return Response.json({ error: "Item not found in your organization" }, { status: 404 });
   }
 

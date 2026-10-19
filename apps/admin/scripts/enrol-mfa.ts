@@ -12,6 +12,7 @@
  * supplied the account is left unenrolled, because enabling MFA without a
  * verified authenticator would lock the operator out of their own console.
  */
+import "./env";
 import { prisma } from "@rf-intelligence/db";
 import { encryptSecret } from "../lib/crypto";
 import { generateTotpSecret, otpauthUri, verifyTotp } from "../lib/totp";

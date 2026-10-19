@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetRateLimit } from "@/app/lib/rate-limit";
 import { signWhatsAppBody } from "@/app/lib/messaging/whatsapp";
-import { CUSTOMER_MESSAGE_AI_EVENT } from "@/app/lib/inngest/client";
+import { CUSTOMER_MESSAGE_AI_EVENT, ORDER_CREATE_DRAFT_EVENT } from "@/app/lib/inngest/client";
 
 interface InboxRow {
   organizationId: string;
@@ -424,7 +424,7 @@ describe("POST /api/webhooks/whatsapp", () => {
 
     expect(h.send).toHaveBeenCalledTimes(2);
     expect(h.send).toHaveBeenNthCalledWith(1, {
-      name: CUSTOMER_MESSAGE_AI_EVENT,
+      name: ORDER_CREATE_DRAFT_EVENT,
       data: expect.objectContaining({
         organizationId: "org_acme",
         customerId: acmeCustomers[0]?.id,

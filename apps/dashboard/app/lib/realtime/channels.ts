@@ -12,12 +12,14 @@
 
 export const REALTIME_CHANNEL_PREFIX = "rf-intel";
 
-export type RealtimeScope = "messages" | "notifications";
+export type RealtimeScope = "messages" | "notifications" | "orders";
 
 export const REALTIME_EVENTS = {
   messageCreated: "message:new",
   conversationCreated: "conversation:new",
   notificationCreated: "notification:new",
+  orderCreated: "order:new",
+  orderUpdated: "order:updated",
 } as const;
 
 export function orgChannel(

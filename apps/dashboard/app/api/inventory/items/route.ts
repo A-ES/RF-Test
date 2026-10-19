@@ -200,6 +200,102 @@ export async function GET(request: Request): Promise<Response> {
     };
   });
 
+  // ── Bridge Catalog Products into Inventory ──────────────────────────────
+  const existingSkus = new Set(items.map((i) => i.sku.toLowerCase()));
+  const defaultLoc = await prisma.inventoryLocation.findFirst({
+    where: { organizationId: session.organizationId },
+    orderBy: { code: "asc" },
+  });
+
+  const productWhere: Prisma.ProductWhereInput = {
+    organizationId: session.organizationId,
+    isActive: true,
+  };
+  if (search) {
+    productWhere.OR = [
+      { sku: { contains: search, mode: "insensitive" } },
+      { name: { contains: search, mode: "insensitive" } },
+      { description: { contains: search, mode: "insensitive" } },
+      {
+        aliases: {
+          some: {
+            alias: { contains: search.toLowerCase(), mode: "insensitive" },
+          },
+        },
+      },
+    ];
+  }
+
+  if (!categoryId || categoryId === "ALL") {
+    const products = await prisma.product.findMany({
+      where: productWhere,
+      include: {
+        inventoryLevel: true,
+      },
+    });
+
+    for (const p of products) {
+      if (existingSkus.has(p.sku.toLowerCase())) continue;
+
+      const onHand = p.inventoryLevel?.onHand ?? 0;
+      const reserved = p.inventoryLevel?.reserved ?? 0;
+      const available = Math.max(0, onHand - reserved);
+
+      let relevantOnHand = onHand;
+      if (locationId && locationId !== "ALL") {
+        if (defaultLoc && defaultLoc.id !== locationId) {
+          relevantOnHand = 0;
+        }
+      }
+
+      const computedStatus = computeInventoryStatus({
+        onHand: relevantOnHand,
+        reorderPoint: p.reorderLevel,
+        targetStock: p.reorderLevel * 3,
+        nearestExpiry: null,
+        expiryTrackingEnabled: false,
+      });
+
+      const unitPriceNum = p.basePriceMinor / 100;
+      const costPriceNum = Math.round(p.basePriceMinor * 0.6) / 100;
+      const stockValue = relevantOnHand * unitPriceNum;
+
+      mappedItems.push({
+        id: p.id,
+        sku: p.sku,
+        barcode: null,
+        name: p.name,
+        categoryId: null,
+        category: "RF Products",
+        unit: (p.unit?.toUpperCase() as any) || "PCS",
+        costPrice: costPriceNum,
+        unitPrice: unitPriceNum,
+        reorderPoint: p.reorderLevel,
+        targetStock: p.reorderLevel * 3,
+        expiryTrackingEnabled: false,
+        description: p.description,
+        isActive: p.isActive,
+        onHand: relevantOnHand,
+        status: computedStatus,
+        stockValue,
+        nearestExpiry: null,
+        stockLevels: [
+          {
+            id: p.inventoryLevel?.id || `sl_${p.id}`,
+            locationId: defaultLoc?.id || "main",
+            locationName: defaultLoc?.name || "Main Distribution Hub",
+            locationCode: defaultLoc?.code || "MAIN",
+            onHand,
+            reserved,
+            available,
+          },
+        ],
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: (p.inventoryLevel?.updatedAt || p.updatedAt).toISOString(),
+      });
+    }
+  }
+
   // Filter by computed status if requested
   const filtered = statusFilter === "ALL"
     ? mappedItems

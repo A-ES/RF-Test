@@ -16,6 +16,8 @@ export interface NormalizedInboundMessage {
   contactIdentifier: string;
   contactDisplayName?: string;
   body: string;
+  attachmentsJson?: string;
+  transcript?: string;
   providerMessageId?: string;
   receivedAt: Date;
 }
@@ -24,6 +26,7 @@ export interface OutboundMessage {
   inboxIdentifier: string;
   contactIdentifier: string;
   body: string;
+  mediaUrl?: string;
 }
 
 export interface MessagingProvider {
@@ -32,6 +35,6 @@ export interface MessagingProvider {
    * Parse a raw HTTP body into zero or more inbound messages. Status callbacks
    * and empty payloads return []. Must not persist or call the model.
    */
-  parseInbound(rawBody: string): NormalizedInboundMessage[];
+  parseInbound(rawBody: string): NormalizedInboundMessage[] | Promise<NormalizedInboundMessage[]>;
   sendOutbound(message: OutboundMessage): Promise<{ providerMessageId?: string }>;
 }

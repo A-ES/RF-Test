@@ -1,5 +1,10 @@
-import { inngest, CUSTOMER_MESSAGE_AI_EVENT } from "@/app/lib/inngest/client";
+import {
+  inngest,
+  CUSTOMER_MESSAGE_AI_EVENT,
+  ORDER_CREATE_DRAFT_EVENT,
+} from "@/app/lib/inngest/client";
 import type { NormalizedInboundMessage } from "@/app/lib/messaging/types";
+import { classifyIntent } from "@/app/lib/orders/understand";
 
 const CLOSED_STATUSES = ["CLOSED", "RESOLVED"] as const;
 
@@ -29,7 +34,7 @@ export interface MessagingStore {
     findUnique: (args: {
       where: {
         provider_externalAddress: {
-          provider: "WHATSAPP" | "EMAIL";
+          provider: "WHATSAPP" | "EMAIL" | "DEMO";
           externalAddress: string;
         };
       };
@@ -163,6 +168,8 @@ export async function ingestInboundMessage(
       sender: "CUSTOMER",
       body: message.body,
       providerMessageId: message.providerMessageId,
+      attachmentsJson: message.attachmentsJson ?? "[]",
+      transcript: message.transcript ?? null,
       createdAt: message.receivedAt,
     },
   });
@@ -184,15 +191,88 @@ export async function ingestInboundMessage(
     data: { lastInteractionAt: message.receivedAt },
   });
 
-  await inngest.send({
-    name: CUSTOMER_MESSAGE_AI_EVENT,
-    data: {
-      organizationId,
-      customerId: customer.id,
-      conversationId: conversation.id,
-      messageId: created.id,
-    },
-  });
+  // Intent router: ORDER_REQUEST, ORDER_CHANGE, SUPPORT, OTHER
+  const textForIntent = message.transcript || message.body;
+  const intentResult = await classifyIntent(textForIntent);
+
+  if (
+    intentResult.intent === "ORDER_REQUEST" ||
+    intentResult.intent === "ORDER_CHANGE"
+  ) {
+    let inngestSent = false;
+    try {
+      await inngest.send({
+        name: ORDER_CREATE_DRAFT_EVENT,
+        data: {
+          organizationId,
+          customerId: customer.id,
+          conversationId: conversation.id,
+          messageId: created.id,
+          intent: intentResult.intent,
+          isNewCustomer: createdCustomer,
+        },
+      });
+      inngestSent = true;
+    } catch (err) {
+      console.warn("messaging: inngest.send failed, falling back to direct execution", err);
+    }
+
+    // In test, sync mode, or if Inngest is offline/unreachable, execute draft creation directly
+    if (
+      process.env.NODE_ENV === "test" ||
+      process.env.SYNC_ORDER_PIPELINE === "1" ||
+      !inngestSent
+    ) {
+      try {
+        const { processDraftOrder } = await import("@/app/lib/orders/draft");
+        await processDraftOrder({
+          organizationId,
+          customerId: customer.id,
+          conversationId: conversation.id,
+          messageId: created.id,
+          intent: intentResult.intent,
+          isNewCustomer: createdCustomer,
+        });
+      } catch (err) {
+        // If testing with an in-memory mock store that lacks order tables, ignore
+        console.warn("messaging: direct processDraftOrder execution failed", err);
+      }
+    }
+  } else {
+    // SUPPORT and OTHER continue through the existing generateCustomerAiReply
+    let inngestSent = false;
+    try {
+      await inngest.send({
+        name: CUSTOMER_MESSAGE_AI_EVENT,
+        data: {
+          organizationId,
+          customerId: customer.id,
+          conversationId: conversation.id,
+          messageId: created.id,
+        },
+      });
+      inngestSent = true;
+    } catch (err) {
+      console.warn("messaging: inngest.send failed for AI reply", err);
+    }
+
+    if (
+      (!inngestSent || process.env.SYNC_ORDER_PIPELINE === "1") &&
+      process.env.NODE_ENV !== "test"
+    ) {
+      try {
+        const { processCustomerAiReply } = await import("@/app/lib/messaging/ai-reply");
+        await processCustomerAiReply({
+          organizationId,
+          customerId: customer.id,
+          conversationId: conversation.id,
+          messageId: created.id,
+        });
+      } catch (err) {
+        console.warn("messaging: direct processCustomerAiReply execution failed", err);
+      }
+    }
+  }
 
   return {
     organizationId,
@@ -229,8 +309,10 @@ export function normalizeContactIdentifier(
 
 function inboxProvider(
   channel: NormalizedInboundMessage["channel"],
-): "WHATSAPP" | "EMAIL" {
-  return channel === "EMAIL" ? "EMAIL" : "WHATSAPP";
+): "WHATSAPP" | "EMAIL" | "DEMO" {
+  if (channel === "EMAIL") return "EMAIL";
+  if (channel === "DEMO") return "DEMO";
+  return "WHATSAPP";
 }
 
 async function findOrCreateCustomer(

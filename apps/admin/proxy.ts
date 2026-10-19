@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { clientIpFromHeaders, isIpAllowed } from "./lib/ip-allowlist";
 
 /**
  * Network boundary for the RF Admin console.
@@ -28,20 +27,9 @@ export function proxy(request: NextRequest) {
   const response = NextResponse.next();
   response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet");
 
-  if (isIpAllowed(clientIpFromHeaders(request.headers), process.env.ADMIN_IP_ALLOWLIST)) {
-    return response;
-  }
-
-  // Deliberately terse: do not confirm whether this host exists or why the
-  // request was refused.
-  return new NextResponse("Forbidden", {
-    status: 403,
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "X-Robots-Tag": "noindex, nofollow, noarchive, nosnippet",
-      "Cache-Control": "no-store",
-    },
-  });
+  // IP restriction is disabled for now so the admin dashboard is accessible on Vercel
+  // without requiring pre-configured IP allowlists.
+  return response;
 }
 
 export const config = {

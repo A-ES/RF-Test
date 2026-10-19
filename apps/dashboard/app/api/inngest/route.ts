@@ -6,6 +6,8 @@ import {
   generateInsightsOnDemand,
   generateCustomerAiReply,
   deliverInternalMessageNotificationFunction,
+  createDraftOrder,
+  handleOrderApproved,
 } from "@/app/lib/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -16,5 +18,8 @@ export const { GET, POST, PUT } = serve({
     generateInsightsOnDemand,
     generateCustomerAiReply,
     deliverInternalMessageNotificationFunction,
+    createDraftOrder,
+    handleOrderApproved,
   ],
 });
+

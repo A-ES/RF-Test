@@ -45,6 +45,7 @@ import { StockAdjustModal } from "@/app/components/inventory/stock-adjust-modal"
 import { CategoryModal } from "@/app/components/inventory/category-modal";
 import { AddItemSlideover } from "@/app/components/inventory/add-item-slideover";
 import { SuppliersPOView } from "@/app/components/inventory/suppliers-po-view";
+import { StockMovementsView } from "@/app/components/inventory/movements-view";
 import type { InventoryStatus } from "@/app/lib/inventory-status";
 
 // Standard SWR fetcher
@@ -82,7 +83,7 @@ function InventorySkeleton() {
 }
 
 export default function InventoryPage() {
-  const [activeTab, setActiveTab] = useState<"STOCK" | "SUPPLIERS_POS">("STOCK");
+  const [activeTab, setActiveTab] = useState<"STOCK" | "MOVEMENTS" | "SUPPLIERS_POS">("STOCK");
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState("");
@@ -236,6 +237,20 @@ export default function InventoryPage() {
             >
               <Package className="size-3.5 text-[var(--accent)]" />
               <span>Stock Overview</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("MOVEMENTS")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-colors",
+                activeTab === "MOVEMENTS"
+                  ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-sm border border-[var(--border-strong)]"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              )}
+            >
+              <Clock className="size-3.5 text-[var(--accent)]" />
+              <span>Stock Movements</span>
             </button>
 
             <button
@@ -749,6 +764,13 @@ export default function InventoryPage() {
               void mutateItems();
             }}
           />
+        </div>
+      )}
+
+      {/* ── TAB 3: STOCK MOVEMENTS AUDIT LOG ── */}
+      {activeTab === "MOVEMENTS" && (
+        <div className="space-y-6">
+          <StockMovementsView />
         </div>
       )}
 

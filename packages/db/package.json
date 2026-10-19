@@ -7,9 +7,9 @@
   "scripts": {
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:push:local": "cross-env DATABASE_URL=postgresql://postgres:password@localhost:5433/rf_intelligence_dev prisma db push",
+    "db:push:local": "cross-env DATABASE_URL=postgresql://postgres:password@localhost:5433/rf_intelligence_dev DIRECT_URL=postgresql://postgres:password@localhost:5433/rf_intelligence_dev prisma db push",
     "db:seed": "ts-node prisma/seed.ts",
-    "db:seed:local": "cross-env DATABASE_URL=postgresql://postgres:password@localhost:5433/rf_intelligence_dev ts-node prisma/seed.ts"
+    "db:seed:local": "cross-env DATABASE_URL=postgresql://postgres:password@localhost:5433/rf_intelligence_dev DIRECT_URL=postgresql://postgres:password@localhost:5433/rf_intelligence_dev ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"

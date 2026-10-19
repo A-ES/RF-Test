@@ -66,10 +66,24 @@ export async function GET(): Promise<Response> {
     select: { itemId: true },
   });
 
-  const [locations, items, activeMovements] = await Promise.all([
+  const productsPromise = prisma.product.findMany({
+    where: { organizationId: orgId, isActive: true },
+    select: {
+      id: true,
+      sku: true,
+      basePriceMinor: true,
+      reorderLevel: true,
+      inventoryLevel: {
+        select: { onHand: true, reserved: true },
+      },
+    },
+  });
+
+  const [locations, items, activeMovements, products] = await Promise.all([
     locationsPromise,
     itemsPromise,
     activeMovementItemsPromise,
+    productsPromise,
   ]);
 
   const activeItemIds = new Set(activeMovements.map((m) => m.itemId));
@@ -131,6 +145,40 @@ export async function GET(): Promise<Response> {
       } else {
         stat.healthy++;
       }
+    }
+  }
+
+  // ── Bridge Catalog Products into Stats ─────────────────────────────────
+  const existingItemSkus = new Set(items.map((i) => i.id));
+  const defaultLocId = locations[0]?.id;
+
+  for (const product of products) {
+    if (existingItemSkus.has(product.id)) continue;
+
+    const unitPrice = product.basePriceMinor / 100;
+    const onHand = product.inventoryLevel?.onHand ?? 0;
+    const stockVal = onHand * unitPrice;
+    totalStockValue += stockVal;
+
+    const status = computeInventoryStatus({
+      onHand,
+      reorderPoint: product.reorderLevel,
+      targetStock: product.reorderLevel * 3,
+      expiryTrackingEnabled: false,
+    });
+
+    if (status === "OUT") {
+      outOfStockCount++;
+    } else if (status === "LOW") {
+      lowStockCount++;
+    }
+
+    if (defaultLocId && locationStatsMap.has(defaultLocId)) {
+      const stat = locationStatsMap.get(defaultLocId)!;
+      stat.stockValue += stockVal;
+      if (onHand === 0) stat.out++;
+      else if (onHand <= product.reorderLevel) stat.low++;
+      else stat.healthy++;
     }
   }
 

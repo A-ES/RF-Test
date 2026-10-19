@@ -1,0 +1,13 @@
+sku,name,description,unit,price,taxRate,stock,reorderLevel,aliases
+ANT-5G-EXT-400,5G High-Gain Outdoor Directional Antenna 400MHz-6GHz,IP67 rated 12dBi outdoor panel antenna with N-Female connector,PCS,12500.00,18%,45,10,5g outdoor antenna; directional antenna; 5g antenna
+ANT-OMNI-2458,Dual-Band 2.4/5.8GHz Omni Fiberglass Antenna,Heavy-duty 8dBi collinear omni antenna for base station installations,PCS,4200.00,18%,80,15,omni antenna; dual band omni; 2.4 5.8 antenna
+CAB-LMR400-10M,LMR-400 Ultra Low Loss Coaxial Cable Assembly 10m,Pre-terminated low-loss RF jumper with N-Male to N-Male connectors,PCS,3150.00,18%,120,20,lmr400 cable; lmr 400 10m; coaxial cable 10m
+CON-NM-CRIMP,N-Type Male Crimp Connector for LMR-400,Gold-plated brass center pin 50-ohm RF crimp connector,PCS,350.00,18%,350,50,n male connector; n type crimp; lmr400 connector
+ENC-IP67-DIECAST,Die-Cast Aluminum IP67 RF Equipment Enclosure,Weatherproof ruggedized housing with cable glands and pole-mount bracket,PCS,5800.00,18%,30,8,ip67 enclosure; aluminum enclosure; outdoor rf box
+MOD-PA-20W,GaN RF Power Amplifier Module 20W 2.4-2.5GHz,High-efficiency solid-state power amplifier with internal heatsink,PCS,28500.00,18%,15,5,power amplifier; 20w pa; rf amp 20w
+ATT-10DB-SMA,10dB Fixed Coaxial RF Attenuator 5W DC-6GHz,Precision 50-ohm SMA Male to SMA Female bi-directional attenuator,PCS,1450.00,18%,60,10,10db attenuator; sma attenuator 10db; 5w attenuator
+SPL-2WAY-SMA,2-Way Wilkinson Power Divider / Splitter 500MHz-6GHz,Low insertion loss microstrip power splitter with SMA-Female ports,PCS,2600.00,18%,40,10,2 way splitter; wilkinson divider; sma power splitter
+AMP-LNA-3500,Ultra Low Noise Amplifier LNA 0.5dB NF 3.5GHz,Sub-6GHz high linearity receiver preamplifier module with USB power,PCS,8900.00,18%,25,5,lna amplifier; low noise amp; 3.5ghz lna
+FIL-BPF-2400,Cavity Bandpass Filter 2.4GHz ISM Band,High rejection steep-skirt cavity filter for co-location interference mitigation,PCS,9500.00,18%,18,5,cavity filter; bandpass filter 2.4ghz; ism bpf
+TER-50OHM-SMA,50-Ohm Precision Dummy Load Termination 2W SMA-Male,Gold-plated test and measurement dummy load up to 18GHz,PCS,650.00,18%,150,25,dummy load; 50 ohm terminator; sma termination
+PRO-SURGE-NF,Gas Discharge RF Surge Lightning Protector N-Female to N-Female,Bulkhead DC-3GHz quarter-wave lightning surge arrestor,PCS,2100.00,18%,75,15,lightning protector; surge arrestor; n female surge

@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  env: {
+    DEMO_CHANNEL_ENABLED: process.env.DEMO_CHANNEL_ENABLED ?? "false",
+  },
   compiler: {
     styledComponents: true,
   },

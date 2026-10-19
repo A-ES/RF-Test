@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   FolderKanban,
   Package,
+  Boxes,
   Sparkles,
   MessageCircleQuestion,
   MessagesSquare,
@@ -18,6 +19,9 @@ import {
   ChevronRight,
   LogOut,
   CheckSquare,
+  ShoppingCart,
+  Truck,
+  Smartphone,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { Separator } from "@/app/components/ui/separator";
@@ -27,6 +31,7 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/app/components/ui/tooltip";
+import { isDemoChannelEnabled } from "@/app/lib/demo-config";
 
 // ─── Nav definition ──────────────────────────────────────────────────────────
 
@@ -47,6 +52,11 @@ const NAV_ITEMS = [
     icon: CheckSquare,
   },
   {
+    label: "Products",
+    href: "/products",
+    icon: Boxes,
+  },
+  {
     label: "Inventory",
     href: "/inventory",
     icon: Package,
@@ -65,6 +75,26 @@ const NAV_ITEMS = [
     label: "Customer Conversations",
     href: "/conversations",
     icon: MessagesSquare,
+  },
+  {
+    label: "Demo Customer",
+    href: "/demo-customer",
+    icon: Smartphone,
+  },
+  {
+    label: "Customers",
+    href: "/customers",
+    icon: Users,
+  },
+  {
+    label: "Orders",
+    href: "/orders",
+    icon: ShoppingCart,
+  },
+  {
+    label: "Fulfillment",
+    href: "/orders/fulfillment",
+    icon: Truck,
   },
   {
     label: "Reports & Documents",
@@ -162,7 +192,10 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           className="flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden py-3"
           style={{ padding: collapsed ? "12px 8px" : "12px 8px" }}
         >
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => {
+            if (item.href === "/demo-customer") return isDemoChannelEnabled();
+            return true;
+          }).map((item) => {
             const Icon = item.icon;
             const isActive =
               pathname === item.href ||

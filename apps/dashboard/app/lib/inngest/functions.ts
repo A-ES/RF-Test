@@ -6,11 +6,15 @@ import {
   DOCUMENT_PROCESS_EVENT,
   INSIGHT_GENERATE_EVENT,
   INTERNAL_MESSAGE_NOTIFY_EVENT,
+  ORDER_CREATE_DRAFT_EVENT,
+  ORDER_APPROVED_EVENT,
   inngest,
   type CustomerMessageAiEventData,
   type DocumentProcessEventData,
   type InsightGenerateEventData,
   type InternalMessageNotifyEventData,
+  type OrderCreateDraftEventData,
+  type OrderApprovedEventData,
 } from "@/app/lib/inngest/client";
 
 // ─── Document processing ──────────────────────────────────────────────────────
@@ -162,3 +166,78 @@ export const deliverInternalMessageNotificationFunction = inngest.createFunction
     });
   },
 );
+
+// ─── WhatsApp Draft Order Creation ─────────────────────────────────────────────
+
+export const createDraftOrder = inngest.createFunction(
+  {
+    id: "create-draft-order",
+    retries: 2,
+    triggers: [{ event: ORDER_CREATE_DRAFT_EVENT }],
+  },
+  async ({ event, step }) => {
+    const data = event.data as OrderCreateDraftEventData;
+
+    return step.run("create-draft-order", async () => {
+      const { processDraftOrder } = await import("@/app/lib/orders/draft");
+      return processDraftOrder(data);
+    });
+  },
+);
+
+// ─── Post-Approval Orchestration (order.approved) ─────────────────────────────
+//
+// Driven by Inngest on order.approved (idempotent per orderId).
+// Generates official gapless sequential invoice + server-side PDF + payment link,
+// and sends initial customer notifications (ORDER_CONFIRMED, INVOICE_SENT).
+export const handleOrderApproved = inngest.createFunction(
+  {
+    id: "handle-order-approved",
+    retries: 2,
+    triggers: [{ event: ORDER_APPROVED_EVENT }, { event: "order/approved" }],
+  },
+  async ({ event, step }) => {
+    const data = event.data as OrderApprovedEventData;
+
+    // Step 1: Generate sequential gapless Invoice + PDF + Payment link (strictly idempotent)
+    const invoice = await step.run("generate-invoice", async () => {
+      const { generateInvoiceForOrder } = await import("@/app/lib/invoices/service");
+      return generateInvoiceForOrder({
+        orderId: data.orderId,
+        organizationId: data.organizationId,
+      });
+    });
+
+    // Step 2: Send ORDER_CONFIRMED update to customer (idempotent dedupe)
+    await step.run("send-order-confirmed", async () => {
+      const { deliverCustomerUpdate } = await import("@/app/lib/messaging/customer-updates");
+      return deliverCustomerUpdate({
+        orderId: data.orderId,
+        organizationId: data.organizationId,
+        event: "ORDER_CONFIRMED",
+      });
+    });
+
+    // Step 3: Send INVOICE_SENT update to customer (idempotent dedupe)
+    await step.run("send-invoice-sent", async () => {
+      const { deliverCustomerUpdate } = await import("@/app/lib/messaging/customer-updates");
+      return deliverCustomerUpdate({
+        orderId: data.orderId,
+        organizationId: data.organizationId,
+        event: "INVOICE_SENT",
+        extraData: {
+          invoiceNumber: invoice.invoiceNumber,
+          paymentLink: invoice.paymentLinkUrl,
+        },
+      });
+    });
+
+    return {
+      orderId: data.orderId,
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      completed: true,
+    };
+  },
+);
+

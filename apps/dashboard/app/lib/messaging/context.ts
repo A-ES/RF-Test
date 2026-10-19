@@ -23,7 +23,7 @@ export interface ConversationRecord {
   id: string;
   organizationId: string;
   customerId: string;
-  channel: "WHATSAPP" | "EMAIL" | "WEB_CHAT" | "SMS";
+  channel: "WHATSAPP" | "EMAIL" | "WEB_CHAT" | "SMS" | "DEMO";
   status: string;
   assignedEmployeeId: string | null;
 }

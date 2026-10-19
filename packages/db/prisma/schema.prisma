@@ -111,6 +111,21 @@ model Organization {
   messagingInboxes        MessagingInbox[]
   settings                OrganizationSettings?
   subscriptions           Subscription[]
+  orders                  Order[]
+  orderLines              OrderLine[]
+  orderEvents             OrderEvent[]
+  products                Product[]
+  productAliases          ProductAlias[]
+  inventoryLevels         InventoryLevel[]
+  stockMovements          StockMovement[]
+  customerPrices          CustomerPrice[]
+  discountRules           DiscountRule[]
+  invoices                Invoice[]
+  payments                Payment[]
+  fulfillments            Fulfillment[]
+  notificationLogs        NotificationLog[]
+  orgCounters             OrgCounter[]
+  conversationReads       ConversationRead[]
 
   @@map("organizations")
 }
@@ -144,6 +159,8 @@ model User {
   inventoryMovements            InventoryMovement[]
   assignedCustomers             Customer[]              @relation("CustomerAssignee")
   assignedCustomerConversations CustomerConversation[]  @relation("CustomerConversationAssignee")
+  approvedOrders                Order[]                 @relation("OrderApprovedBy")
+  conversationReads             ConversationRead[]
 
   @@index([organizationId, role])
   @@map("users")
@@ -714,6 +731,7 @@ enum CustomerConversationChannel {
   EMAIL
   WEB_CHAT
   SMS
+  DEMO
 }
 
 enum CustomerConversationStatus {
@@ -751,6 +769,8 @@ model Customer {
   tagsJson           String // JSON string array of tags
   internalNotes      String?
   orderReference     String? // purchase/order history reference
+  paymentTermsDays   Int?
+  taxId              String?
   // Visibility: a CLIENT_EMPLOYEE only sees customers assigned to them; a
   // CLIENT_ADMIN sees every customer in their organization.
   assignedEmployeeId String?
@@ -761,6 +781,9 @@ model Customer {
   organization     Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedEmployee User?                  @relation("CustomerAssignee", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
   conversations    CustomerConversation[]
+  orders           Order[]
+  customerPrices   CustomerPrice[]
+  discountRules    DiscountRule[]
 
   @@index([organizationId, status])
   @@index([organizationId, assignedEmployeeId])
@@ -789,10 +812,12 @@ model CustomerConversation {
   createdAt          DateTime                     @default(now())
   updatedAt          DateTime                     @updatedAt
 
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  assignedEmployee User?             @relation("CustomerConversationAssignee", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer         Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignedEmployee User?              @relation("CustomerConversationAssignee", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
   messages         CustomerMessage[]
+  orders           Order[]
+  reads            ConversationRead[]
 
   @@index([organizationId, status])
   @@index([organizationId, channel])
@@ -812,7 +837,9 @@ model CustomerMessage {
   confidenceScore Float?
   // Provider-issued id (e.g. WhatsApp wamid). Used to ignore webhook retries.
   providerMessageId String?
-  createdAt       DateTime              @default(now())
+  attachmentsJson   String?               @default("[]")
+  transcript        String?
+  createdAt         DateTime              @default(now())
 
   organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   conversation CustomerConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -835,6 +862,7 @@ model CustomerMessage {
 enum MessagingProviderKind {
   WHATSAPP
   EMAIL
+  DEMO
 }
 
 model MessagingInbox {
@@ -851,6 +879,433 @@ model MessagingInbox {
   @@unique([provider, externalAddress])
   @@index([organizationId, provider])
   @@map("messaging_inboxes")
+}
+
+// ─── 16b. RF Intelligence WhatsApp-to-Order & Order-to-Cash Pipeline ─────────
+
+enum StockMovementReason {
+  ORDER_RESERVE
+  ORDER_RELEASE
+  FULFILLMENT
+  ADJUSTMENT
+  ERP_SYNC
+}
+
+enum DiscountScope {
+  CUSTOMER
+  PRODUCT
+  ORDER
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+enum OrderStatus {
+  DRAFT
+  NEEDS_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+  FULFILLING
+  DISPATCHED
+  DELIVERED
+}
+
+enum OrderPaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  REFUNDED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  VOID
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum FulfillmentStatus {
+  PENDING
+  PACKING
+  DISPATCHED
+  DELIVERED
+}
+
+enum OrderActorKind {
+  SYSTEM
+  AI
+  CUSTOMER
+  EMPLOYEE
+}
+
+enum NotificationAudience {
+  CLIENT
+  CUSTOMER
+}
+
+enum CounterKey {
+  ORDER
+  INVOICE
+  DRAFT
+}
+
+model Product {
+  id             String   @id @default(cuid())
+  organizationId String
+  sku            String
+  name           String
+  description    String?
+  unit           String   @default("PCS")
+  basePriceMinor Int
+  taxRateBps     Int      @default(1800)
+  isActive       Boolean  @default(true)
+  reorderLevel   Int      @default(10)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  aliases        ProductAlias[]
+  inventoryLevel InventoryLevel?
+  stockMovements StockMovement[]
+  customerPrices CustomerPrice[]
+  discountRules  DiscountRule[]
+  orderLines     OrderLine[]
+
+  @@unique([organizationId, sku])
+  @@index([organizationId, isActive])
+  @@map("products")
+}
+
+model ProductAlias {
+  id             String   @id @default(cuid())
+  organizationId String
+  productId      String
+  alias          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, alias])
+  @@index([organizationId, productId])
+  @@map("product_aliases")
+}
+
+model InventoryLevel {
+  id             String   @id @default(cuid())
+  organizationId String
+  productId      String   @unique
+  onHand         Int      @default(0)
+  reserved       Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, productId])
+  @@index([organizationId])
+  @@map("inventory_levels")
+}
+
+model StockMovement {
+  id             String              @id @default(cuid())
+  organizationId String
+  productId      String
+  delta          Int
+  reason         StockMovementReason
+  orderId        String?
+  actorId        String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  order        Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, productId])
+  @@index([organizationId, orderId])
+  @@index([organizationId, createdAt])
+  @@map("stock_movements")
+}
+
+model CustomerPrice {
+  id             String    @id @default(cuid())
+  organizationId String
+  customerId     String
+  productId      String
+  priceMinor     Int
+  validFrom      DateTime?
+  validTo        DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, customerId, productId])
+  @@index([organizationId, customerId])
+  @@index([organizationId, productId])
+  @@map("customer_prices")
+}
+
+model DiscountRule {
+  id            String        @id @default(cuid())
+  organizationId String
+  scope         DiscountScope
+  customerId    String?
+  productId     String?
+  type          DiscountType
+  value         Int
+  minQty        Int?
+  minOrderMinor Int?
+  validFrom     DateTime?
+  validTo       DateTime?
+  priority      Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product      Product?     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, scope])
+  @@index([organizationId, customerId])
+  @@index([organizationId, productId])
+  @@map("discount_rules")
+}
+
+model Order {
+  id              String             @id @default(cuid())
+  organizationId  String
+  orderNumber     String?
+  draftNumber     String
+  customerId      String
+  conversationId  String?
+  sourceMessageId String?
+  status          OrderStatus        @default(DRAFT)
+  paymentStatus   OrderPaymentStatus @default(UNPAID)
+  subtotalMinor   Int                @default(0)
+  discountMinor   Int                @default(0)
+  taxMinor        Int                @default(0)
+  totalMinor      Int                @default(0)
+  currency        String             @default("INR")
+  deliveryDate    DateTime?
+  deliveryAddress String?
+  instructions    String?
+  flagsJson       String             @default("[]")
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectedReason  String?
+  version         Int                @default(1)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  organization     Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer         Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  conversation     CustomerConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  approvedBy       User?                 @relation("OrderApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  lines            OrderLine[]
+  events           OrderEvent[]
+  invoices         Invoice[]
+  fulfillments     Fulfillment[]
+  payments         Payment[]
+  stockMovements   StockMovement[]
+  notificationLogs NotificationLog[]
+
+  @@unique([organizationId, draftNumber])
+  @@unique([organizationId, orderNumber])
+  @@index([organizationId, status])
+  @@index([organizationId, customerId])
+  @@index([organizationId, createdAt])
+  @@index([conversationId])
+  @@map("orders")
+}
+
+model OrderLine {
+  id              String   @id @default(cuid())
+  organizationId  String
+  orderId         String
+  productId       String?
+  sku             String
+  rawText         String
+  matchConfidence Float    @default(1.0)
+  qty             Int
+  unitPriceMinor  Int
+  discountMinor   Int      @default(0)
+  taxMinor        Int      @default(0)
+  lineTotalMinor  Int
+  flagsJson       String   @default("[]")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, orderId])
+  @@index([organizationId, productId])
+  @@map("order_lines")
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  organizationId String
+  orderId        String
+  invoiceNumber  String
+  status         InvoiceStatus @default(DRAFT)
+  issuedAt       DateTime      @default(now())
+  dueAt          DateTime
+  paymentTerms   String        @default("Net 30")
+  pdfPath        String?
+  paymentLinkUrl String?
+  paymentLinkId  String?
+  totalMinor     Int
+  snapshotJson   String?
+  voidReason     String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  payments     Payment[]
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([organizationId, orderId])
+  @@index([organizationId, status])
+  @@map("invoices")
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  organizationId    String
+  invoiceId         String?
+  orderId           String
+  provider          String
+  providerPaymentId String        @unique
+  amountMinor       Int
+  status            PaymentStatus @default(PENDING)
+  paidAt            DateTime?
+  rawJson           String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, orderId])
+  @@index([organizationId, invoiceId])
+  @@map("payments")
+}
+
+model Fulfillment {
+  id             String            @id @default(cuid())
+  organizationId String
+  orderId        String
+  status         FulfillmentStatus @default(PENDING)
+  carrier        String?
+  trackingRef    String?
+  deliveryNote   String?
+  dispatchedAt   DateTime?
+  deliveredAt    DateTime?
+  notes          String?
+  overrideReason String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, orderId])
+  @@index([organizationId, status])
+  @@map("fulfillments")
+}
+
+model OrderEvent {
+  id             String         @id @default(cuid())
+  organizationId String
+  orderId        String
+  type           String
+  actorKind      OrderActorKind
+  actorId        String?
+  fromStatus     OrderStatus?
+  toStatus       OrderStatus?
+  payloadJson    String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, orderId, createdAt])
+  @@map("order_events")
+}
+
+model NotificationLog {
+  id                String               @id @default(cuid())
+  organizationId    String
+  orderId           String?
+  audience          NotificationAudience
+  channel           String
+  template          String
+  dedupeKey         String               @unique
+  status            String
+  providerMessageId String?
+  error             String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, orderId])
+  @@map("notification_logs")
+}
+
+model OrgCounter {
+  id             String     @id @default(cuid())
+  organizationId String
+  key            CounterKey
+  nextValue      Int        @default(1)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+  @@map("org_counters")
+}
+
+model ConversationRead {
+  id             String   @id @default(cuid())
+  organizationId String
+  conversationId String
+  userId         String
+  lastReadAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversation CustomerConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([organizationId, userId])
+  @@map("conversation_reads")
 }
 
 // ─── RF Admin Console Identity (top-level, deliberately NOT tenant-scoped) ──────
@@ -984,6 +1439,17 @@ model OrganizationSettings {
   autoReplyEnabled   Boolean @default(true)
   featureFlagsJson   String  @default("{}") // JSON object of boolean feature flags
   dataRetentionDays  Int?
+
+  // ── Order, Invoice & Payment Configuration ────────────────────────────────
+  currency                 String  @default("INR")
+  invoicePrefix            String  @default("INV-")
+  paymentTermsDays         Int     @default(30)
+  defaultTaxBps            Int     @default(1800)
+  taxId                    String?
+  logoUrl                  String?
+  fulfillmentRequires      String  @default("PAYMENT_PAID")
+  paymentsEnabled          Boolean @default(true)
+  orderApprovalNotifyEmail String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

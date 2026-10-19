@@ -71,8 +71,21 @@ export async function POST(request: Request): Promise<Response> {
     return json({ error: "Invalid signature" }, 401);
   }
 
-  const inbound = whatsappProvider.parseInbound(rawBody);
+  const inbound = await whatsappProvider.parseInbound(rawBody);
   await ingestInboundMessages(prisma as unknown as MessagingStore, inbound);
+
+  // Store provider ids and delivery status from the WhatsApp status webhook
+  const { parseWhatsAppStatuses } = await import("@/app/lib/messaging/whatsapp");
+  const statuses = parseWhatsAppStatuses(rawBody);
+  for (const st of statuses) {
+    await prisma.notificationLog.updateMany({
+      where: { providerMessageId: st.providerMessageId },
+      data: {
+        status: st.status.toUpperCase(),
+        error: st.error ?? undefined,
+      },
+    });
+  }
 
   return json({ received: true }, 200);
 }
