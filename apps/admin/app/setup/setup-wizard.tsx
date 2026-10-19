@@ -4,16 +4,19 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ShieldCheck,
-  KeyRound,
   QrCode,
   Copy,
   Check,
   ArrowRight,
+  ArrowLeft,
   Eye,
   EyeOff,
   Sparkles,
-  Lock,
 } from "lucide-react";
+import { SignIn6 } from "@/components/ui/sign-in-6";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type SetupStep = "account" | "mfa" | "success";
 
@@ -129,27 +132,37 @@ export function SetupWizard() {
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
-  return (
-    <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#12151d] p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between border-b border-white/10 pb-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/15 text-accent border border-accent/20">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-white tracking-tight">RF Admin Console</h1>
-            <p className="text-xs text-text-muted">Initial Setup & Security Wizard</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-[11px] font-medium text-accent border border-accent/25">
-          <Sparkles className="h-3 w-3" />
-          Guided Setup
-        </div>
-      </div>
+  const getTitle = () => {
+    if (step === "account") return "Initial Admin Setup";
+    if (step === "mfa") return "Two-Factor Authentication";
+    return "Setup Complete!";
+  };
 
-      {/* Progress Steps */}
-      <div className="mb-8 grid grid-cols-2 gap-2 text-xs">
+  const getSubtitle = () => {
+    if (step === "account") return "Create your primary operator account to secure the console.";
+    if (step === "mfa") return "Scan the QR code with your authenticator app to enable 2FA.";
+    return "Your administrator account has been secured with 2FA.";
+  };
+
+  return (
+    <SignIn6
+      brandName="RF Admin"
+      tagline="Mission-critical operations and platform infrastructure control."
+      proofCountText="Platform security initialization"
+      title={getTitle()}
+      subtitle={getSubtitle()}
+      loading={loading}
+      error={error}
+      className="max-w-4xl"
+      badge={
+        <div className="flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/15 px-2.5 py-1 text-[11px] font-medium text-accent">
+          <Sparkles className="h-3 w-3" />
+          <span>Guided Setup</span>
+        </div>
+      }
+    >
+      {/* 2-Step Progress Indicator */}
+      <div className="grid grid-cols-2 gap-2 text-xs">
         <div
           className={`flex items-center gap-2 rounded-lg px-3 py-2 border transition-all ${
             step === "account"
@@ -157,12 +170,14 @@ export function SetupWizard() {
               : "border-white/5 bg-white/[0.02] text-text-muted"
           }`}
         >
-          <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
-            step !== "account" ? "bg-accent/20 text-accent" : "bg-accent text-accent-fg"
-          }`}>
+          <span
+            className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+              step !== "account" ? "bg-accent/20 text-accent" : "bg-accent text-accent-fg"
+            }`}
+          >
             1
           </span>
-          <span>Admin Account</span>
+          <span className="truncate">Admin Account</span>
         </div>
         <div
           className={`flex items-center gap-2 rounded-lg px-3 py-2 border transition-all ${
@@ -171,67 +186,66 @@ export function SetupWizard() {
               : "border-white/5 bg-white/[0.02] text-text-muted"
           }`}
         >
-          <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
-            step === "success" ? "bg-accent text-accent-fg" : "bg-white/10 text-white"
-          }`}>
+          <span
+            className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+              step === "success" ? "bg-accent text-accent-fg" : "bg-white/10 text-white"
+            }`}
+          >
             2
           </span>
-          <span>2FA Authenticator</span>
+          <span className="truncate">2FA Pairing</span>
         </div>
       </div>
 
-      {error ? (
-        <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
-          {error}
-        </div>
-      ) : null}
-
       {/* Step 1: Account Credentials */}
       {step === "account" ? (
-        <form onSubmit={handleInitiateSetup} className="flex flex-col gap-4">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">
+        <form onSubmit={handleInitiateSetup} className="flex flex-col gap-3.5">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="setup-name" className="text-xs text-text-secondary">
               Your Display Name
-            </label>
-            <input
+            </Label>
+            <Input
+              id="setup-name"
               type="text"
               required
               placeholder="e.g. Alex Smith"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-white placeholder-text-muted outline-none transition-colors focus:border-accent"
+              className="border-white/10 bg-surface text-white placeholder-text-muted focus:border-accent"
             />
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="setup-email" className="text-xs text-text-secondary">
               Admin Email Address
-            </label>
-            <input
+            </Label>
+            <Input
+              id="setup-email"
               type="email"
               required
               placeholder="e.g. admin@yourcompany.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-white placeholder-text-muted outline-none transition-colors focus:border-accent"
+              className="border-white/10 bg-surface text-white placeholder-text-muted focus:border-accent"
             />
-            <p className="mt-1 text-[11px] text-text-muted">
-              This replaces the default placeholder email and will be your login address.
+            <p className="text-[11px] text-text-muted">
+              This replaces the placeholder email and will be your permanent login address.
             </p>
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="setup-password" className="text-xs text-text-secondary">
               Admin Password
-            </label>
+            </Label>
             <div className="relative">
-              <input
+              <Input
+                id="setup-password"
                 type={showPassword ? "text" : "password"}
                 required
                 placeholder="Choose a strong password (min 12 chars)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-surface px-3 py-2 pr-10 text-sm text-white placeholder-text-muted outline-none transition-colors focus:border-accent"
+                className="border-white/10 bg-surface pr-10 text-white placeholder-text-muted focus:border-accent"
               />
               <button
                 type="button"
@@ -243,8 +257,8 @@ export function SetupWizard() {
               </button>
             </div>
 
-            {/* Password checklist */}
-            <div className="mt-2 flex flex-col gap-1 text-[11px]">
+            {/* Checklist */}
+            <div className="mt-1 flex flex-col gap-1 text-[11px]">
               <span className={`flex items-center gap-1.5 ${hasMinLength ? "text-emerald-400" : "text-text-muted"}`}>
                 <Check className="h-3 w-3" /> At least 12 characters
               </span>
@@ -257,84 +271,84 @@ export function SetupWizard() {
             </div>
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="setup-confirm-password" className="text-xs text-text-secondary">
               Confirm Password
-            </label>
-            <input
+            </Label>
+            <Input
+              id="setup-confirm-password"
               type="password"
               required
               placeholder="Re-enter your password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-white placeholder-text-muted outline-none transition-colors focus:border-accent"
+              className="border-white/10 bg-surface text-white placeholder-text-muted focus:border-accent"
             />
             {confirmPassword && !passwordsMatch ? (
-              <p className="mt-1 text-[11px] text-red-400">Passwords do not match.</p>
+              <p className="text-[11px] text-red-400">Passwords do not match.</p>
             ) : null}
           </div>
 
-          <button
+          <Button
             type="submit"
             disabled={loading || !hasMinLength || !passwordsMatch || !email}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-accent py-2.5 text-sm font-semibold text-accent-fg shadow-lg shadow-accent/20 transition-all hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-2 w-full bg-accent text-accent-fg hover:bg-accent-hover font-semibold text-xs py-2.5 shadow-lg shadow-accent/20"
           >
             {loading ? "Generating Security Keys…" : "Continue to 2FA Setup"}
-            <ArrowRight className="h-4 w-4" />
-          </button>
+            <ArrowRight className="ml-1.5 h-4 w-4" />
+          </Button>
         </form>
       ) : null}
 
       {/* Step 2: MFA Pairing */}
       {step === "mfa" ? (
-        <form onSubmit={handleVerifyMfa} className="flex flex-col gap-5">
-          <div className="rounded-xl border border-white/10 bg-surface/50 p-4">
-            <h2 className="mb-1 text-sm font-semibold text-white flex items-center gap-2">
+        <form onSubmit={handleVerifyMfa} className="flex flex-col gap-4">
+          <div className="rounded-xl border border-white/10 bg-surface/50 p-3.5">
+            <div className="flex items-center gap-2 mb-1">
               <QrCode className="h-4 w-4 text-accent" />
-              Scan with your Authenticator App
-            </h2>
-            <p className="text-xs text-text-muted leading-relaxed">
-              Open Google Authenticator, Microsoft Authenticator, 1Password, or Apple Passwords on your phone and scan the QR code below:
+              <span className="text-xs font-semibold text-white">Scan with Authenticator App</span>
+            </div>
+            <p className="text-[11px] text-text-muted leading-relaxed">
+              Scan with Google Authenticator, Microsoft Authenticator, 1Password, or Apple Passwords:
             </p>
 
-            {/* QR Code Container */}
-            <div className="my-4 flex flex-col items-center justify-center">
+            <div className="my-3 flex items-center justify-center">
               {qrCodeUrl ? (
-                <div className="rounded-xl bg-white p-3 shadow-md border-2 border-accent/30">
+                <div className="rounded-xl bg-white p-2.5 shadow-md border-2 border-accent/30">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={qrCodeUrl} alt="2FA QR Code" className="h-48 w-48 rounded" />
+                  <img src={qrCodeUrl} alt="2FA QR Code" className="h-40 w-40 rounded" />
                 </div>
               ) : (
-                <div className="flex h-48 w-48 items-center justify-center rounded-xl bg-black/40 text-xs text-text-muted">
+                <div className="flex h-40 w-40 items-center justify-center rounded-xl bg-black/40 text-xs text-text-muted">
                   Loading QR Code…
                 </div>
               )}
             </div>
 
-            {/* Manual Secret Key option */}
-            <div className="rounded-lg border border-white/5 bg-black/40 p-2.5">
-              <div className="mb-1 flex items-center justify-between text-[11px] text-text-muted">
-                <span>Can't scan? Enter key manually:</span>
+            <div className="rounded-lg border border-white/5 bg-black/40 p-2 text-[11px]">
+              <div className="mb-1 flex items-center justify-between text-text-muted">
+                <span>Manual key:</span>
                 <button
                   type="button"
                   onClick={copySecretKey}
                   className="flex items-center gap-1 text-accent hover:underline"
                 >
                   {copiedKey ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                  {copiedKey ? "Copied!" : "Copy Key"}
+                  {copiedKey ? "Copied!" : "Copy"}
                 </button>
               </div>
-              <p className="font-mono text-xs font-semibold tracking-wider text-white break-all select-all">
+              <p className="font-mono text-[11px] font-semibold text-white break-all select-all">
                 {totpSecret}
               </p>
             </div>
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="mfa-verify-code" className="text-xs text-text-secondary">
               Enter 6-digit Code from Authenticator
-            </label>
-            <input
+            </Label>
+            <Input
+              id="mfa-verify-code"
               type="text"
               inputMode="numeric"
               pattern="\d{6}"
@@ -344,39 +358,41 @@ export function SetupWizard() {
               placeholder="000000"
               value={mfaCode}
               onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
-              className="w-full rounded-lg border border-white/10 bg-surface px-3 py-2.5 text-center font-mono text-xl tracking-[0.4em] text-white placeholder-text-muted outline-none transition-colors focus:border-accent"
+              className="border-white/10 bg-surface text-center font-mono text-xl tracking-[0.4em] text-white placeholder-text-muted focus:border-accent"
             />
           </div>
 
           <div className="flex gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={() => setStep("account")}
               disabled={loading}
-              className="w-1/3 rounded-lg border border-white/10 bg-transparent py-2.5 text-sm font-medium text-text-secondary hover:bg-white/5 hover:text-white"
+              className="w-1/3 border-white/10 bg-surface text-xs text-text-secondary hover:text-white"
             >
+              <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
               Back
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={loading || mfaCode.length !== 6}
-              className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-accent py-2.5 text-sm font-semibold text-accent-fg shadow-lg shadow-accent/20 transition-all hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 bg-accent text-accent-fg hover:bg-accent-hover font-semibold text-xs py-2.5 shadow-lg shadow-accent/20"
             >
               {loading ? "Verifying…" : "Complete Setup & Sign In"}
-              <Check className="h-4 w-4" />
-            </button>
+              <Check className="ml-1.5 h-4 w-4" />
+            </Button>
           </div>
         </form>
       ) : null}
 
       {/* Step 3: Success state */}
       {step === "success" ? (
-        <div className="flex flex-col items-center py-8 text-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-            <Check className="h-8 w-8 animate-bounce" />
+        <div className="flex flex-col items-center py-6 text-center">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            <Check className="h-7 w-7 animate-bounce" />
           </div>
-          <h2 className="text-xl font-bold text-white mb-1">Setup Complete!</h2>
-          <p className="text-xs text-text-muted max-w-xs mb-6">
+          <h2 className="text-lg font-bold text-white mb-1">Setup Complete!</h2>
+          <p className="text-xs text-text-muted max-w-xs mb-5">
             Your administrator account has been secured with 2FA. Redirecting you to the console…
           </p>
           <div className="flex items-center gap-2 text-xs text-accent">
@@ -385,6 +401,8 @@ export function SetupWizard() {
           </div>
         </div>
       ) : null}
-    </div>
+    </SignIn6>
   );
 }
+
+export default SetupWizard;

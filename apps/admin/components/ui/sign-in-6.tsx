@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 export function GoogleIcon() {
   return (
@@ -64,6 +65,7 @@ export interface SignIn6Props {
   footerLink?: React.ReactNode;
   children?: React.ReactNode;
   badge?: React.ReactNode;
+  className?: string;
 }
 
 export function SignIn6({
@@ -85,9 +87,10 @@ export function SignIn6({
   footerLink,
   children,
   badge,
+  className,
 }: SignIn6Props) {
   return (
-    <Card className="grid w-full max-w-3xl gap-0 overflow-hidden border border-white/10 bg-[#12151d] p-0 shadow-2xl backdrop-blur-xl md:grid-cols-2">
+    <Card className={cn("grid w-full max-w-3xl gap-0 overflow-hidden border border-white/10 bg-[#12151d] p-0 shadow-2xl backdrop-blur-xl md:grid-cols-2", className)}>
       {/* Left hero banner */}
       <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-b from-accent-deep/40 via-surface to-[#0d0e12] p-8 text-white md:flex border-r border-white/5">
         <div className="pointer-events-none absolute -top-24 -right-24 size-64 rounded-full bg-accent/15 blur-3xl" />
