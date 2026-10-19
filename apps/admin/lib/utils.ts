@@ -1,7 +1,8 @@
+import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
-export function cn(...inputs: (string | undefined | null | false | 0)[]) {
-  return twMerge(inputs.filter(Boolean) as string[]);
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
 }
 
 /** Format ISO date string → human readable */

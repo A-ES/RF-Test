@@ -33,23 +33,8 @@ export default async function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <div className="flex flex-col items-center gap-6">
-        {setupState.available ? (
-          <Link
-            href="/setup"
-            className="flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-2 text-xs font-medium text-accent hover:bg-accent/20 transition-all shadow-md"
-          >
-            <Sparkles className="size-3.5" />
-            <span>First time setup? Configure your admin account &rarr;</span>
-          </Link>
-        ) : null}
-        <LoginForm />
-        <p className="max-w-sm text-center text-[11px] leading-relaxed text-text-muted">
-          Access is restricted to authorised RF Intelligence staff. All sign-in
-          attempts are logged.
-        </p>
-      </div>
+    <main className="flex min-h-screen items-center justify-center p-4 sm:p-6" style={{ background: "var(--console-frame)" }}>
+      <LoginForm setupAvailable={setupState.available} />
     </main>
   );
 }

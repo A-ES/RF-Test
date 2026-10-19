@@ -2,17 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
+import Link from "next/link";
+import { Sparkles, ArrowLeft, ShieldCheck } from "lucide-react";
+import { SignIn6 } from "@/components/ui/sign-in-6";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 type Step = "credentials" | "mfa";
 
-/**
- * Two-step sign-in form: password, then TOTP.
- *
- * The password step never yields a session on its own — the server only issues
- * a pending MFA challenge — so this component cannot skip straight to the
- * console by manipulating client state.
- */
-export function LoginForm() {
+interface LoginFormProps {
+  setupAvailable?: boolean;
+}
+
+export function LoginForm({ setupAvailable = false }: LoginFormProps) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("credentials");
   const [email, setEmail] = useState("");
@@ -73,74 +76,97 @@ export function LoginForm() {
   );
 
   return (
-    <form
-      onSubmit={step === "credentials" ? submitCredentials : submitMfa}
-      className="flex w-full max-w-sm flex-col gap-4 rounded-lg border border-border bg-console-panel p-6"
+    <SignIn6
+      brandName="RF Admin"
+      tagline="Mission-critical operations and platform infrastructure control."
+      proofCountText="Restricted to authorized RF staff"
+      title={step === "credentials" ? "Admin Sign in" : "Two-Factor Authentication"}
+      subtitle={
+        step === "credentials"
+          ? "Sign in with your RF operator credentials."
+          : "Enter the 6-digit code from your authenticator app."
+      }
+      email={email}
+      password={password}
+      onEmailChange={setEmail}
+      onPasswordChange={setPassword}
+      onSubmit={submitCredentials}
+      loading={busy}
+      error={error}
+      submitButtonText="Continue"
+      showGoogleAuth={false}
+      badge={
+        <span className="rounded border border-accent/40 bg-accent/15 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-accent font-semibold">
+          Internal Console
+        </span>
+      }
+      footerLink={
+        <div className="flex flex-col items-center gap-3 mt-1">
+          {setupAvailable && step === "credentials" ? (
+            <Link
+              href="/setup"
+              className="flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] font-medium text-accent hover:bg-accent/20 transition-all"
+            >
+              <Sparkles className="size-3" />
+              <span>Initial setup? Configure your account &rarr;</span>
+            </Link>
+          ) : null}
+          <p className="text-center text-[11px] text-text-muted leading-relaxed max-w-xs">
+            Access is restricted to authorized RF Intelligence staff. All sign-in attempts are logged in the audit trail.
+          </p>
+        </div>
+      }
     >
-      <div className="flex flex-col gap-1">
-        <h1 className="font-heading text-lg text-text-primary">RF Admin</h1>
-        <p className="text-xs text-text-muted">
-          {step === "credentials"
-            ? "Internal operations console. Sign in with your RF admin account."
-            : "Enter the 6-digit code from your authenticator app."}
-        </p>
-      </div>
-
-      {step === "credentials" ? (
-        <>
-          <label className="flex flex-col gap-1 text-xs text-text-secondary">
-            Email
-            <input
-              type="email"
-              name="email"
-              autoComplete="username"
+      {step === "mfa" ? (
+        <form onSubmit={submitMfa} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ss-code" className="text-xs text-text-secondary">
+              Verification Code
+            </Label>
+            <Input
+              id="ss-code"
+              type="text"
+              name="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="\d{6}"
+              maxLength={6}
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="rounded border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+              autoFocus
+              placeholder="000000"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              className="border-white/10 bg-surface text-center font-mono text-xl tracking-[0.4em] text-white placeholder-text-muted focus:border-accent"
             />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-text-secondary">
-            Password
-            <input
-              type="password"
-              name="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="rounded border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-            />
-          </label>
-        </>
-      ) : (
-        <label className="flex flex-col gap-1 text-xs text-text-secondary">
-          Verification code
-          <input
-            type="text"
-            name="code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="\d{6}"
-            maxLength={6}
-            required
-            autoFocus
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-            className="rounded border border-border bg-surface px-3 py-2 text-center font-mono text-lg tracking-[0.4em] text-text-primary outline-none focus:border-accent"
-          />
-        </label>
-      )}
+          </div>
 
-      {error ? <p className="text-xs text-red-400">{error}</p> : null}
-
-      <button
-        type="submit"
-        disabled={busy}
-        className="rounded bg-accent px-3 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-50"
-      >
-        {busy ? "Checking…" : step === "credentials" ? "Continue" : "Verify"}
-      </button>
-    </form>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setStep("credentials");
+                setCode("");
+                setError(null);
+              }}
+              disabled={busy}
+              className="w-1/3 border-white/10 bg-surface text-xs text-text-secondary hover:text-white"
+            >
+              <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+              Back
+            </Button>
+            <Button
+              type="submit"
+              disabled={busy || code.length !== 6}
+              className="flex-1 bg-accent text-accent-fg hover:bg-accent-hover font-semibold text-xs py-2.5"
+            >
+              {busy ? "Verifying…" : "Verify & Sign in"}
+            </Button>
+          </div>
+        </form>
+      ) : null}
+    </SignIn6>
   );
 }
+
+export default LoginForm;
