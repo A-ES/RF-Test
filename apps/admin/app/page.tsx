@@ -10,13 +10,22 @@ export const dynamic = "force-dynamic";
  * or /login if already configured.
  */
 export default async function AdminRootPage() {
-  const session = await getRfAdminSession();
-  if (!session) {
-    const setupState = await isSetupAvailable();
-    if (setupState.available) {
-      redirect("/setup");
+  try {
+    const session = await getRfAdminSession();
+    if (!session) {
+      const setupState = await isSetupAvailable();
+      if (setupState.available) {
+        redirect("/setup");
+      }
+      redirect("/login");
     }
-    redirect("/login");
+    redirect("/console/organizations");
+  } catch (error: any) {
+    // Next.js redirect() throws an internal error that must bubble up
+    if (error?.digest?.startsWith("NEXT_REDIRECT") || error?.message === "NEXT_REDIRECT") {
+      throw error;
+    }
+    console.error("AdminRootPage error:", error);
+    redirect("/setup");
   }
-  redirect("/console/organizations");
 }

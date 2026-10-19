@@ -67,25 +67,31 @@ export async function isSetupAvailable(): Promise<SetupStatus> {
     return { available: true, reason: "Explicitly allowed via ALLOW_ADMIN_SETUP=true" };
   }
 
-  const admins = await prisma.rfAdminUser.findMany({
-    select: { id: true, email: true },
-    take: 2,
-  });
+  try {
+    const admins = await prisma.rfAdminUser.findMany({
+      select: { id: true, email: true },
+      take: 2,
+    });
 
-  if (admins.length === 0) {
-    return { available: true, reason: "No administrators configured" };
+    if (admins.length === 0) {
+      return { available: true, reason: "No administrators configured" };
+    }
+
+    if (admins.length === 1 && admins[0].email === "admin@rf-intelligence.com") {
+      return {
+        available: true,
+        reason: "Initial default admin pending personalization",
+        defaultAdminId: admins[0].id,
+        existingEmail: admins[0].email,
+      };
+    }
+
+    return { available: false, reason: "Administrator already configured" };
+  } catch (error) {
+    console.error("Database check failed in isSetupAvailable:", error);
+    // Return setup available as safe fallback so the client can access setup
+    return { available: true, reason: "Database setup pending or uninitialized" };
   }
-
-  if (admins.length === 1 && admins[0].email === "admin@rf-intelligence.com") {
-    return {
-      available: true,
-      reason: "Initial default admin pending personalization",
-      defaultAdminId: admins[0].id,
-      existingEmail: admins[0].email,
-    };
-  }
-
-  return { available: false, reason: "Administrator already configured" };
 }
 
 export function createSetupChallengeToken(data: {

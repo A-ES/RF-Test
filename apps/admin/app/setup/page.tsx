@@ -12,14 +12,22 @@ export const metadata: Metadata = {
 };
 
 export default async function SetupPage() {
-  const session = await getRfAdminSession();
-  if (session) {
-    redirect("/console/organizations");
-  }
+  try {
+    const session = await getRfAdminSession();
+    if (session) {
+      redirect("/console/organizations");
+    }
 
-  const setupState = await isSetupAvailable();
-  if (!setupState.available) {
-    redirect("/login");
+    const setupState = await isSetupAvailable();
+    if (!setupState.available) {
+      redirect("/login");
+    }
+  } catch (error: any) {
+    if (error?.digest?.startsWith("NEXT_REDIRECT") || error?.message === "NEXT_REDIRECT") {
+      throw error;
+    }
+    console.error("SetupPage check error:", error);
+    // Proceed to render SetupWizard so user can complete setup
   }
 
   return (

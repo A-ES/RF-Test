@@ -18,10 +18,19 @@ export const metadata: Metadata = {
  * or links to the setup wizard if initial setup is pending.
  */
 export default async function LoginPage() {
-  const session = await getRfAdminSession();
-  if (session) redirect("/");
+  let session = null;
+  let setupState = { available: false };
 
-  const setupState = await isSetupAvailable();
+  try {
+    session = await getRfAdminSession();
+    if (session) redirect("/");
+    setupState = await isSetupAvailable();
+  } catch (error: any) {
+    if (error?.digest?.startsWith("NEXT_REDIRECT") || error?.message === "NEXT_REDIRECT") {
+      throw error;
+    }
+    console.error("LoginPage error:", error);
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">

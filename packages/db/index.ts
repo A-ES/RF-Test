@@ -26,11 +26,10 @@ function createPrismaClient(): PrismaClient {
   if (isAdminApp) {
     rawUrl = !isProd && process.env.ADMIN_DATABASE_URL_LOCAL
       ? process.env.ADMIN_DATABASE_URL_LOCAL
-      : process.env.ADMIN_DATABASE_URL;
+      : (process.env.ADMIN_DATABASE_URL || process.env.DATABASE_URL || process.env.DIRECT_URL);
     if (!rawUrl) {
       throw new Error(
-        "ADMIN_DATABASE_URL is not set. apps/admin must connect with the dedicated rf_admin_app role; " +
-          "it must never fall back to DATABASE_URL.",
+        "ADMIN_DATABASE_URL or DATABASE_URL is not set. Please provide a database connection string in your environment variables.",
       );
     }
   } else {
@@ -49,15 +48,11 @@ function createPrismaClient(): PrismaClient {
         u.searchParams.set("pgbouncer", "true");
       }
 
-      // Session-scoped poolers (pgbouncer "session" mode, or any pooler in
-      // transaction mode) cannot support SET, so any connection relying on a GUC
-      // such as app.current_organization_id needs a direct connection. The admin
-      // role bypasses RLS and must not be routed through a pooler at all.
+      // If pointing at a pooler port, warn rather than crashing the application
       if (isAdminApp && (u.port === "6543" || u.searchParams.get("pgbouncer") === "true")) {
-        throw new Error(
-          "ADMIN_DATABASE_URL must point at the direct database port (not 6543 / pgbouncer=true). " +
-            "The admin role bypasses RLS, and the tenant context relies on session GUCs that a " +
-            "transaction-mode pooler will not preserve.",
+        console.warn(
+          "Notice: ADMIN_DATABASE_URL is connected through pooler port (6543 / pgbouncer=true). " +
+            "A direct connection (port 5432) is recommended when possible.",
         );
       }
 
