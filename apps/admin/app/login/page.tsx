@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { Sparkles } from "lucide-react";
 import { getRfAdminSession } from "@/lib/session";
-import { isSetupAvailable } from "@/lib/setup";
 import { LoginForm } from "./login-form";
 
 export const dynamic = "force-dynamic";
@@ -14,17 +11,14 @@ export const metadata: Metadata = {
 };
 
 /**
- * The unauthenticated sign-in page. It renders the two-step sign-in form
- * or links to the setup wizard if initial setup is pending.
+ * The unauthenticated sign-in page. It renders the two-step sign-in form.
  */
 export default async function LoginPage() {
   let session = null;
-  let setupState = { available: false };
 
   try {
     session = await getRfAdminSession();
     if (session) redirect("/");
-    setupState = await isSetupAvailable();
   } catch (error: any) {
     if (error?.digest?.startsWith("NEXT_REDIRECT") || error?.message === "NEXT_REDIRECT") {
       throw error;
@@ -34,7 +28,7 @@ export default async function LoginPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center p-4 sm:p-6" style={{ background: "var(--console-frame)" }}>
-      <LoginForm setupAvailable={setupState.available} />
+      <LoginForm />
     </main>
   );
 }

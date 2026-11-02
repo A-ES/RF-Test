@@ -37,8 +37,6 @@ next-env.d.ts
 # turbo
 .turbo
 
-# pnpm
-pnpm-lock.yaml
 .env*
 # Templates hold no secrets and must be committed.
 !.env.example

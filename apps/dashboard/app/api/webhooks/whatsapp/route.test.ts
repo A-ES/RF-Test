@@ -369,7 +369,7 @@ describe("POST /api/webhooks/whatsapp", () => {
     const acmeBody = whatsappPayload({
       phoneNumberId: "pnid_acme",
       from: "15551110001",
-      body: "Need a quote for 40 units",
+      body: "Need 40 units of Widget A",
       messageId: "wamid.acme.1",
       name: "Alice Acme",
     });
@@ -406,7 +406,7 @@ describe("POST /api/webhooks/whatsapp", () => {
 
     expect(acmeMessages).toHaveLength(1);
     expect(globexMessages).toHaveLength(1);
-    expect(acmeMessages[0]?.body).toBe("Need a quote for 40 units");
+    expect(acmeMessages[0]?.body).toBe("Need 40 units of Widget A");
     expect(acmeMessages[0]?.sender).toBe("CUSTOMER");
     expect(globexMessages[0]?.body).toBe("Is the shipment still on for Friday?");
     expect(globexMessages[0]?.sender).toBe("CUSTOMER");
@@ -441,6 +441,23 @@ describe("POST /api/webhooks/whatsapp", () => {
         messageId: globexMessages[0]?.id,
       }),
     });
+  });
+
+  it("returns 500 when WHATSAPP_APP_SECRET is unset", async () => {
+    const saved = process.env.WHATSAPP_APP_SECRET;
+    delete process.env.WHATSAPP_APP_SECRET;
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/webhooks/whatsapp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        }),
+      );
+      expect(res.status).toBe(500);
+    } finally {
+      process.env.WHATSAPP_APP_SECRET = saved;
+    }
   });
 
   it("rejects an unsigned payload", async () => {

@@ -28,15 +28,15 @@ export async function POST(request: Request): Promise<Response> {
   const signature = request.headers.get("x-razorpay-signature");
 
   if (!signature) {
-    return json({ error: "Missing x-razorpay-signature header" }, 400);
+    return json({ error: "Missing x-razorpay-signature header" }, 401);
   }
 
   const provider = getPaymentProvider();
   const isValid = provider.verifyWebhookSignature(rawBody, signature, secret);
 
-  // Requirement: Invalid signature changes nothing!
+  // Requirement: Invalid signature changes nothing! Return 401 on mismatch before parsing
   if (!isValid) {
-    return json({ error: "Invalid webhook signature" }, 400);
+    return json({ error: "Invalid webhook signature" }, 401);
   }
 
   let eventPayload: Record<string, unknown>;

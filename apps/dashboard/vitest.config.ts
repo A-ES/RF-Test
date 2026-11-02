@@ -24,9 +24,9 @@ if (fs.existsSync(envLocalPath)) {
   }
 }
 
-// In local test runs, ensure DATABASE_URL defaults to local Docker PostgreSQL if not set
-if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = process.env.DATABASE_URL_LOCAL || "postgresql://postgres:password@127.0.0.1:5433/rf_intelligence_dev";
+// In local test runs, ensure DATABASE_URL uses DATABASE_URL_LOCAL if set
+if (!process.env.DATABASE_URL && process.env.DATABASE_URL_LOCAL) {
+  process.env.DATABASE_URL = process.env.DATABASE_URL_LOCAL;
 }
 
 export default defineConfig({

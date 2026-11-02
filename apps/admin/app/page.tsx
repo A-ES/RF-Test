@@ -1,22 +1,16 @@
 import { redirect } from "next/navigation";
 import { getRfAdminSession } from "@/lib/session";
-import { isSetupAvailable } from "@/lib/setup";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Root `/` — redirect authenticated admins into the console.
- * Unauthenticated visitors are routed to /setup if initial setup is pending,
- * or /login if already configured.
+ * Unauthenticated visitors are routed to /login.
  */
 export default async function AdminRootPage() {
   try {
     const session = await getRfAdminSession();
     if (!session) {
-      const setupState = await isSetupAvailable();
-      if (setupState.available) {
-        redirect("/setup");
-      }
       redirect("/login");
     }
     redirect("/console/organizations");
@@ -26,6 +20,6 @@ export default async function AdminRootPage() {
       throw error;
     }
     console.error("AdminRootPage error:", error);
-    redirect("/setup");
+    redirect("/login");
   }
 }

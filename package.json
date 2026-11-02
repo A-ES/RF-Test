@@ -12,6 +12,7 @@
     "test": "turbo run test",
     "inngest:dev": "pnpm --filter @rf-intelligence/dashboard inngest:dev",
     "eval:ask-rf": "pnpm --filter @rf-intelligence/dashboard test run app/ask-rf-eval.test.ts",
+    "admin:create": "pnpm --filter @rf-intelligence/admin admin:create",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\""
   },
   "devDependencies": {

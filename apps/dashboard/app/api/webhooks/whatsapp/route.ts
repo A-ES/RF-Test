@@ -62,7 +62,7 @@ export async function POST(request: Request): Promise<Response> {
   const appSecret = process.env.WHATSAPP_APP_SECRET;
   if (!appSecret) {
     console.error("messaging: WHATSAPP_APP_SECRET is not configured");
-    return json({ error: "Webhook is not configured" }, 503);
+    return json({ error: "Webhook is not configured" }, 500);
   }
 
   const rawBody = await request.text();

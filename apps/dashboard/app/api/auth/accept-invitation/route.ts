@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import { getSession, setSessionCookie } from "@/app/lib/session";
 import { prisma } from "@/app/lib/db";
 import { verifyInviteToken } from "@/app/lib/invite-token";
 import { writeAuditLog } from "@/app/lib/audit";
+import { hashPassword } from "@rf-intelligence/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -111,11 +111,8 @@ export async function POST(request: Request): Promise<Response> {
     return json({ error: "An account with that email already exists" }, 409);
   }
 
-  // 3-4. Hash the password with SHA-256.
-  // NOTE: In production swap this for bcrypt (install `bcryptjs`) or argon2.
-  // SHA-256 is used here because no password-hashing library is installed in
-  // this repository.
-  const passwordHash = createHash("sha256").update(password).digest("hex");
+  // 3-4. Hash the password with scrypt.
+  const passwordHash = await hashPassword(password);
 
   const initials = name
     .split(" ")

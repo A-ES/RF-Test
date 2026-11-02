@@ -1,41 +1,24 @@
-import { createHash, randomBytes, scrypt } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import { hashPassword } from "../password";
 
 const dbUrl =
   process.env.DIRECT_URL ||
   process.env.DATABASE_URL ||
-  process.env.DATABASE_URL_LOCAL ||
-  "postgresql://postgres:password@localhost:5433/rf_intelligence_dev";
+  process.env.DATABASE_URL_LOCAL;
+
+if (!dbUrl) {
+  throw new Error(
+    "DATABASE_URL or DIRECT_URL must be set to run the seed script. Plaintext fallback credentials have been removed.",
+  );
+}
+
 if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = dbUrl;
 }
 const prisma = new PrismaClient({
   datasources: { db: { url: dbUrl } },
 });
-
-
-/**
- * Mirrors `hashPassword` in apps/admin/lib/password.ts.
- *
- * Duplicated rather than imported because apps/admin depends on this package,
- * not the other way round — importing up the dependency graph would invert the
- * layering. The format string below is a contract between this seeder and the
- * admin app's `verifyPassword`; if the app's parameters change, change them here
- * too. (A legacy bare-SHA-256 digest is still accepted by the app, so this is
- * the only thing that must stay in sync.)
- */
-async function scryptHash(password: string): Promise<string> {
-  const N = 16384;
-  const r = 8;
-  const p = 1;
-  const salt = randomBytes(16);
-  const derived = await new Promise<Buffer>((resolve, reject) => {
-    scrypt(password.normalize("NFKC"), salt, 32, { N, r, p }, (err, key) =>
-      err ? reject(err) : resolve(key),
-    );
-  });
-  return ["scrypt", N, r, p, salt.toString("base64"), derived.toString("base64")].join("$");
-}
 
 async function main() {
   console.log("🌱 Starting Database Seed with Part 1 Demo Data...");
@@ -56,12 +39,16 @@ async function main() {
   console.log(`✓ Organization created: ${org.name}`);
 
   // 2. Create Primary Demo Users
+  const seedUserPassword = process.env.SEED_USER_PASSWORD || randomBytes(16).toString("hex");
+  const seedUserPasswordHash = await hashPassword(seedUserPassword);
+
   const jordan = await prisma.user.create({
     data: {
       id: "usr_jordan",
       organizationId: org.id,
       name: "Jordan Ellis",
       email: "jordan.ellis@acmecorp.com",
+      passwordHash: seedUserPasswordHash,
       role: "ADMIN",
       avatarInitials: "JE",
     },
@@ -73,6 +60,7 @@ async function main() {
       organizationId: org.id,
       name: "Priya Sharma",
       email: "priya.sharma@acmecorp.com",
+      passwordHash: seedUserPasswordHash,
       role: "MEMBER",
       avatarInitials: "PS",
     },
@@ -84,6 +72,7 @@ async function main() {
       organizationId: org.id,
       name: "Tom Kwan",
       email: "tom.kwan@acmecorp.com",
+      passwordHash: seedUserPasswordHash,
       role: "MEMBER",
       avatarInitials: "TK",
     },
@@ -95,6 +84,7 @@ async function main() {
       organizationId: org.id,
       name: "Ana Reyes",
       email: "ana.reyes@acmecorp.com",
+      passwordHash: seedUserPasswordHash,
       role: "MEMBER",
       avatarInitials: "AR",
     },
@@ -106,6 +96,7 @@ async function main() {
       organizationId: org.id,
       name: "Marcus Lee",
       email: "marcus.lee@acmecorp.com",
+      passwordHash: seedUserPasswordHash,
       role: "MEMBER",
       avatarInitials: "ML",
     },
@@ -118,6 +109,7 @@ async function main() {
       organizationId: org.id,
       name: "RF Technical Specialist",
       email: "tech@rf-intelligence.com",
+      passwordHash: seedUserPasswordHash,
       role: "MEMBER",
       avatarInitials: "RF",
       isRFTeam: true,
@@ -130,6 +122,7 @@ async function main() {
       organizationId: org.id,
       name: "RF Onboarding AI Specialist",
       email: "onboarding@rf-intelligence.com",
+      passwordHash: seedUserPasswordHash,
       role: "MEMBER",
       avatarInitials: "RF",
       isRFTeam: true,
@@ -142,6 +135,7 @@ async function main() {
       organizationId: org.id,
       name: "RF Data Engineering",
       email: "data@rf-intelligence.com",
+      passwordHash: seedUserPasswordHash,
       role: "MEMBER",
       avatarInitials: "RF",
       isRFTeam: true,
@@ -1056,10 +1050,9 @@ async function main() {
   // The password is scrypt-hashed to match apps/admin's `verifyPassword`. The
   // old bare SHA-256 digest is still accepted (and transparently upgraded on
   // first successful sign-in), so an existing row keeps working.
-  const rfAdminPassword = process.env.RF_ADMIN_SEED_PASSWORD
-    ?? process.env.AUTH_DEMO_PASSWORD
-    ?? "password";
-  const rfAdminPasswordHash = await scryptHash(rfAdminPassword);
+  const rfAdminPassword =
+    process.env.RF_ADMIN_SEED_PASSWORD || randomBytes(16).toString("hex");
+  const rfAdminPasswordHash = await hashPassword(rfAdminPassword);
 
   const rfConsoleAdmin = await prisma.rfAdminUser.upsert({
     where: { email: "admin@rf-intelligence.com" },

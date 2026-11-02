@@ -246,3 +246,5 @@ export async function getDatabaseRoleInfo(): Promise<DatabaseRoleInfo> {
 export function resetDatabaseRoleInfoCache(): void {
   roleInfoPromise = null;
 }
+
+export * from "./password";

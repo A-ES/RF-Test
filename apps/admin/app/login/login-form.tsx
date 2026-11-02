@@ -2,8 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
-import Link from "next/link";
-import { Sparkles, ArrowLeft, ShieldCheck } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { SignIn6 } from "@/components/ui/sign-in-6";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,11 +10,7 @@ import { Button } from "@/components/ui/button";
 
 type Step = "credentials" | "mfa";
 
-interface LoginFormProps {
-  setupAvailable?: boolean;
-}
-
-export function LoginForm({ setupAvailable = false }: LoginFormProps) {
+export function LoginForm() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("credentials");
   const [email, setEmail] = useState("");
@@ -102,15 +97,6 @@ export function LoginForm({ setupAvailable = false }: LoginFormProps) {
       }
       footerLink={
         <div className="flex flex-col items-center gap-3 mt-1">
-          {setupAvailable && step === "credentials" ? (
-            <Link
-              href="/setup"
-              className="flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] font-medium text-accent hover:bg-accent/20 transition-all"
-            >
-              <Sparkles className="size-3" />
-              <span>Initial setup? Configure your account &rarr;</span>
-            </Link>
-          ) : null}
           <p className="text-center text-[11px] text-text-muted leading-relaxed max-w-xs">
             Access is restricted to authorized RF Intelligence staff. All sign-in attempts are logged in the audit trail.
           </p>

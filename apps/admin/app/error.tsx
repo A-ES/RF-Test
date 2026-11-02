@@ -48,11 +48,11 @@ export default function ErrorBoundary({
             Reload Page
           </button>
           <Link
-            href="/setup"
+            href="/login"
             className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-white/10"
           >
             <Home className="h-3.5 w-3.5" />
-            Go to Setup
+            Go to Sign in
           </Link>
         </div>
       </div>
