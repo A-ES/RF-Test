@@ -63,7 +63,7 @@ export async function GET(
 
   const { id } = await ctx.params;
 
-  const conversation = await prisma.customerConversation.findFirst({
+  const conversation: any = await (prisma.customerConversation as any).findFirst({
     where: { id, organizationId: session.organizationId },
     select: {
       id: true,
@@ -71,6 +71,9 @@ export async function GET(
       status: true,
       priority: true,
       subject: true,
+      aiIntent: true,
+      aiSummary: true,
+      aiContextJson: true,
       lastMessageAt: true,
       lastMessagePreview: true,
       escalationReason: true,
@@ -99,6 +102,9 @@ export async function GET(
           confidenceScore: true,
           providerMessageId: true,
           attachmentsJson: true,
+          emailSubject: true,
+          emailHeadersJson: true,
+          status: true,
           createdAt: true,
         },
       },

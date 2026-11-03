@@ -26,13 +26,14 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
+      const data = (await res.json().catch(() => null)) as { error?: string; redirectTo?: string } | null;
+
       if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as { error?: string } | null;
         setError(data?.error || "Sign in failed. Please try again.");
         return;
       }
 
-      router.push("/dashboard");
+      router.push(data?.redirectTo || "/dashboard");
       router.refresh();
     } catch {
       setError("Could not reach the server. Please check your connection.");
@@ -69,13 +70,12 @@ export default function LoginPage() {
         footerLink={
           <p className="text-center text-xs text-[var(--text-muted,rgba(245,245,240,0.6))] mt-2">
             Don&apos;t have an account?{" "}
-            <button
-              type="button"
-              onClick={() => setError("Account access requests are managed by your workspace administrator.")}
+            <a
+              href="/register"
               className="text-[var(--accent,#F24E4B)] font-medium hover:underline"
             >
-              Request access
-            </button>
+              Create workspace
+            </a>
           </p>
         }
       />

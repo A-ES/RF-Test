@@ -65,22 +65,29 @@ export async function GET(
   });
 
   if (!item) {
-    const product = await prisma.product.findFirst({
-      where: {
-        organizationId: session.organizationId,
-        OR: [{ id }, { sku: id }],
-      },
-      include: {
-        inventoryLevel: true,
-        stockMovements: {
-          orderBy: { createdAt: "desc" },
-          take: 50,
-          include: {
-            order: { select: { id: true, orderNumber: true, draftNumber: true } },
+    let product: any = null;
+    try {
+      if (typeof (prisma as any).product?.findFirst === "function") {
+        product = await prisma.product.findFirst({
+          where: {
+            organizationId: session.organizationId,
+            OR: [{ id }, { sku: id }],
           },
-        },
-      },
-    });
+          include: {
+            inventoryLevel: true,
+            stockMovements: {
+              orderBy: { createdAt: "desc" },
+              take: 50,
+              include: {
+                order: { select: { id: true, orderNumber: true, draftNumber: true } },
+              },
+            },
+          },
+        });
+      }
+    } catch {
+      product = null;
+    }
 
     if (product) {
       const defaultLoc = await prisma.inventoryLocation.findFirst({
@@ -130,7 +137,7 @@ export async function GET(
             },
           ],
           batches: [],
-          movements: product.stockMovements.map((sm) => ({
+          movements: (product.stockMovements || []).map((sm: any) => ({
             id: sm.id,
             timestamp: sm.createdAt.toISOString(),
             type:

@@ -14,17 +14,15 @@ import {
   Clock,
   CalendarDays,
   MapPin,
-  RefreshCw,
   Plus,
   SlidersHorizontal,
   Layers,
   ChevronRight,
   TrendingUp,
   Building2,
-  FileCheck2,
-  ArrowDownRight,
-  ArrowUpRight,
   AlertCircle,
+  X,
+  Sparkles,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -61,23 +59,29 @@ const fetcher = async (url: string) => {
 function InventorySkeleton() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-8 animate-pulse">
-      <div className="space-y-2">
-        <div className="h-3.5 w-24 bg-[var(--surface-elevated)] rounded" />
-        <div className="h-8 w-64 sm:w-80 bg-[var(--surface-elevated)] rounded-lg" />
-        <div className="h-4 w-96 bg-[var(--surface-elevated)] rounded" />
+      {/* Header skeleton */}
+      <div className="space-y-3">
+        <div className="h-3.5 w-28 bg-[var(--surface-elevated)] rounded" />
+        <div className="h-10 w-72 sm:w-96 bg-[var(--surface-elevated)] rounded-lg" />
+        <div className="h-4 w-60 bg-[var(--surface-elevated)] rounded" />
       </div>
 
+      {/* Tabs skeleton */}
+      <div className="h-11 w-full max-w-md bg-[var(--surface-elevated)] rounded-xl" />
+
+      {/* KPI grid skeleton */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[1, 2, 3, 4].map((i) => (
           <div
             key={i}
-            className="h-28 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)]"
+            className="h-32 rounded-xl border border-white/5 bg-[var(--surface-elevated)]"
           />
         ))}
       </div>
 
-      <div className="h-64 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)]" />
-      <div className="h-80 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)]" />
+      {/* Chart & Table skeletons */}
+      <div className="h-64 rounded-xl border border-white/5 bg-[var(--surface-elevated)]" />
+      <div className="h-96 rounded-xl border border-white/5 bg-[var(--surface-elevated)]" />
     </div>
   );
 }
@@ -119,13 +123,13 @@ export default function InventoryPage() {
   const locations = useMemo(() => locData?.locations ?? [], [locData]);
 
   // 3. Fetch Inventory Stats (KPIs + Location Distribution)
-  const { data: statsData, mutate: mutateStats, error: statsError } = useSWR(
+  const { data: statsData, mutate: mutateStats } = useSWR(
     "/api/inventory/stats",
     fetcher
   );
 
   // 4. Fetch Suppliers & Purchase Orders
-  const { data: supData, mutate: mutateSuppliers } = useSWR(
+  const { data: supData } = useSWR(
     "/api/inventory/suppliers",
     fetcher
   );
@@ -170,7 +174,6 @@ export default function InventoryPage() {
 
   // Optimistic stock adjust callback
   const handleStockAdjustSuccess = (updatedItem: any) => {
-    // Refresh stats & items
     void mutateStats();
     void mutateItems((current: any) => {
       if (!current) return current;
@@ -183,214 +186,306 @@ export default function InventoryPage() {
     }, true);
   };
 
+  const hasActiveFilters =
+    Boolean(searchQuery) ||
+    selectedCategory !== "ALL" ||
+    selectedLocation !== "ALL" ||
+    selectedStatus !== "ALL";
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setSelectedCategory("ALL");
+    setSelectedLocation("ALL");
+    setSelectedStatus("ALL");
+  };
+
   if (itemsLoading && !itemsData) {
     return <InventorySkeleton />;
   }
 
   const stockByLocationData = statsData?.byLocation ?? [];
+  const totalStockValue = statsData?.totalStockValue ?? 0;
+  const totalSkus = statsData?.totalSkus ?? items.length;
+  const lowStockCount = statsData?.lowStockCount ?? 0;
+  const deadStockCount = statsData?.deadStockCount ?? 0;
+  const expiringCount = statsData?.expiringCount ?? 0;
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-8">
-      {/* ── Main Page Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <p className="dash-eyebrow">/ inventory &amp; procurement</p>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--text-primary)] mt-1">
-            Warehouse Stock &amp; Dark Store Inventory
-          </h1>
-          <p className="mt-1 text-xs text-[var(--text-muted)]">
-            Monitor real-time SKU balances, reorder points, low stock alerts, and quick stock in/out adjustments.
-          </p>
-        </div>
+    <div className="mx-auto max-w-[1200px] space-y-8 pb-10">
+      {/* ── Main Dashboard-Style Header ── */}
+      <header className="relative w-full overflow-hidden pb-1">
+        {/* Subtle red radial glow for depth matching /dashboard */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-16 -left-12 h-64 w-64 rounded-full bg-[radial-gradient(circle,rgba(242,78,75,0.12)_0%,transparent_70%)] blur-2xl"
+        />
 
-        {/* Action Controls & Top Tabs */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsCategoryModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] hover:bg-[var(--surface)] text-xs font-semibold text-[var(--text-primary)] transition-colors"
-          >
-            <Layers className="size-3.5 text-[var(--text-muted)]" />
-            <span>Manage Categories</span>
-          </button>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-5">
+          <div>
+            <p className="dash-eyebrow mb-2">/ INVENTORY &amp; PROCUREMENT</p>
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-[var(--text-primary)]">
+              Warehouse Stock &amp;{" "}
+              <span className="bg-gradient-to-r from-[#F24E4B] via-[#FB7185] to-[#F97316] bg-clip-text text-transparent bg-[length:200%_auto]">
+                Inventory.
+              </span>
+            </h1>
 
-          <button
-            type="button"
-            onClick={() => setIsAddItemOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[var(--accent)] text-black text-xs font-bold hover:opacity-90 transition-opacity shadow-sm"
-          >
-            <Plus className="size-3.5" />
-            <span>+ Add Item</span>
-          </button>
+            {/* Contextual Live Summary Bar */}
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs sm:text-sm text-[var(--text-muted)] font-medium">
+              <span className="font-mono text-[var(--text-secondary)] font-semibold">
+                ${totalStockValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total Value
+              </span>
+              <span className="text-[var(--border-strong)]">·</span>
+              <span>{totalSkus} Active SKUs</span>
+              <span className="text-[var(--border-strong)]">·</span>
 
-          {/* Top-Level Module Tabs */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] ml-1">
+              {/* Status pill badges */}
+              {lowStockCount > 0 ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-950/30 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                  <span>{lowStockCount} low stock</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-950/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <span>Stock optimal</span>
+                </span>
+              )}
+
+              {expiringCount > 0 && (
+                <>
+                  <span className="text-[var(--border-strong)]">·</span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-950/30 px-2.5 py-0.5 text-xs font-semibold text-purple-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
+                    <span>{expiringCount} expiring soon</span>
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Actions Cluster */}
+          <div className="flex items-center gap-2.5 shrink-0">
             <button
               type="button"
-              onClick={() => setActiveTab("STOCK")}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-colors",
-                activeTab === "STOCK"
-                  ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-sm border border-[var(--border-strong)]"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              )}
+              onClick={() => setIsCategoryModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] hover:bg-[var(--surface)] text-xs font-semibold text-[var(--text-primary)] transition-all hover:border-[var(--border-strong)]"
             >
-              <Package className="size-3.5 text-[var(--accent)]" />
-              <span>Stock Overview</span>
+              <Layers className="size-3.5 text-[var(--text-muted)]" />
+              <span>Categories</span>
             </button>
 
             <button
               type="button"
-              onClick={() => setActiveTab("MOVEMENTS")}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-colors",
-                activeTab === "MOVEMENTS"
-                  ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-sm border border-[var(--border-strong)]"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              )}
+              onClick={() => setIsAddItemOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-xs font-semibold hover:opacity-90 transition-all shadow-md shadow-[#F24E4B]/20"
             >
-              <Clock className="size-3.5 text-[var(--accent)]" />
-              <span>Stock Movements</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("SUPPLIERS_POS")}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-colors",
-                activeTab === "SUPPLIERS_POS"
-                  ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-sm border border-[var(--border-strong)]"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              )}
-            >
-              <Building2 className="size-3.5 text-[var(--accent)]" />
-              <span>Suppliers &amp; POs</span>
+              <Plus className="size-3.5" />
+              <span>Add Item</span>
             </button>
           </div>
         </div>
+      </header>
+
+      {/* ── Seamless Module Tab Navigation Bar ── */}
+      <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+        <nav className="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)]" aria-label="Inventory navigation">
+          <button
+            type="button"
+            onClick={() => setActiveTab("STOCK")}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all",
+              activeTab === "STOCK"
+                ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-sm border border-[var(--border-strong)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            )}
+          >
+            <Package className={cn("size-3.5", activeTab === "STOCK" ? "text-[var(--accent)]" : "text-[var(--text-muted)]")} />
+            <span>Stock Overview</span>
+            <span className="ml-0.5 rounded-full bg-[var(--surface-elevated)] px-1.5 py-0.2 text-[10px] font-mono border border-white/5">
+              {totalSkus}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("MOVEMENTS")}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all",
+              activeTab === "MOVEMENTS"
+                ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-sm border border-[var(--border-strong)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            )}
+          >
+            <Clock className={cn("size-3.5", activeTab === "MOVEMENTS" ? "text-[var(--accent)]" : "text-[var(--text-muted)]")} />
+            <span>Stock Movements</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("SUPPLIERS_POS")}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all",
+              activeTab === "SUPPLIERS_POS"
+                ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-sm border border-[var(--border-strong)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            )}
+          >
+            <Building2 className={cn("size-3.5", activeTab === "SUPPLIERS_POS" ? "text-[var(--accent)]" : "text-[var(--text-muted)]")} />
+            <span>Suppliers &amp; POs</span>
+            {purchaseOrders.length > 0 && (
+              <span className="ml-0.5 rounded-full bg-[var(--surface-elevated)] px-1.5 py-0.2 text-[10px] font-mono border border-white/5">
+                {purchaseOrders.length}
+              </span>
+            )}
+          </button>
+        </nav>
       </div>
 
-      {/* ── TAB 1: INVENTORY STOCK OVERVIEW ── */}
+      {/* ── TAB 1: STOCK OVERVIEW ── */}
       {activeTab === "STOCK" && (
-        <div className="space-y-8 animate-in fade-in duration-150">
-          {/* 1. KPI Metric Cards */}
+        <div className="space-y-8 animate-in fade-in duration-200">
+          {/* 1. Dashboard-Themed Bento KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-3 shadow-sm hover:border-[var(--border-strong)] transition-all">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                  Total Stock Value
-                </span>
+            {/* Card 1: Total Valuation */}
+            <div className="w-full h-full bg-[#0D0E12] border-[2px] border-black dark:border-white/20 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] dark:shadow-[5px_5px_0px_0px_rgba(255,255,255,0.08)] relative flex flex-col p-5 transition-all duration-200 overflow-hidden rounded-xl hover:border-white/40 hover:shadow-[7px_7px_0px_0px_rgba(242,78,75,0.3)]">
+              <div className="absolute inset-0 opacity-[0.05] pointer-events-none z-0 bg-[radial-gradient(#fff_1.5px,transparent_1.5px)] [background-size:10px_10px]" />
+              <div className="flex items-start justify-between gap-2 mb-3 border-b border-white/10 pb-2.5 z-10">
+                <div>
+                  <h3 className="font-mono text-xs uppercase tracking-widest text-[var(--text-muted)] font-semibold">
+                    Total Valuation
+                  </h3>
+                  <p className="text-2xl sm:text-3xl font-black tracking-tight text-[var(--text-primary)] mt-1 font-mono">
+                    ${totalStockValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </div>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
                   <DollarSign className="size-4" />
                 </span>
               </div>
-              <div>
-                <p className="text-2xl font-bold font-mono tracking-tight text-[var(--text-primary)]">
-                  ${(statsData?.totalStockValue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
-                <div className="flex items-center gap-1.5 text-[11px] font-mono text-emerald-400 mt-1">
-                  <TrendingUp className="size-3" />
-                  <span>Across {statsData?.totalSkus ?? items.length} active SKUs</span>
-                </div>
+              <div className="relative z-10 flex items-center gap-1.5 text-xs font-mono text-emerald-400 mt-auto">
+                <TrendingUp className="size-3" />
+                <span>Across {totalSkus} active SKUs</span>
               </div>
             </div>
 
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-3 shadow-sm hover:border-[var(--border-strong)] transition-all">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                  Low Stock Items
-                </span>
+            {/* Card 2: Low Stock */}
+            <div className="w-full h-full bg-[#0D0E12] border-[2px] border-black dark:border-white/20 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] dark:shadow-[5px_5px_0px_0px_rgba(255,255,255,0.08)] relative flex flex-col p-5 transition-all duration-200 overflow-hidden rounded-xl hover:border-white/40 hover:shadow-[7px_7px_0px_0px_rgba(242,78,75,0.3)]">
+              <div className="absolute inset-0 opacity-[0.05] pointer-events-none z-0 bg-[radial-gradient(#fff_1.5px,transparent_1.5px)] [background-size:10px_10px]" />
+              <div className="flex items-start justify-between gap-2 mb-3 border-b border-white/10 pb-2.5 z-10">
+                <div>
+                  <h3 className="font-mono text-xs uppercase tracking-widest text-[var(--text-muted)] font-semibold">
+                    Low Stock Items
+                  </h3>
+                  <p className="text-2xl sm:text-3xl font-black tracking-tight text-[var(--text-primary)] mt-1 font-mono">
+                    {lowStockCount} <span className="text-xs text-[var(--text-muted)] font-normal">SKUs</span>
+                  </p>
+                </div>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400">
                   <AlertTriangle className="size-4" />
                 </span>
               </div>
-              <div>
-                <p className="text-2xl font-bold font-mono tracking-tight text-[var(--text-primary)]">
-                  {statsData?.lowStockCount ?? 0} <span className="text-xs text-[var(--text-muted)] font-normal">SKUs</span>
-                </p>
-                <p className="text-[11px] text-amber-400 font-mono mt-1">
-                  {(statsData?.lowStockCount ?? 0) > 0 ? "Requires restock PO" : "Stock levels optimal"}
-                </p>
+              <div className="relative z-10 flex items-center gap-1.5 text-xs font-mono mt-auto">
+                {lowStockCount > 0 ? (
+                  <span className="text-amber-400">Restock purchase order recommended</span>
+                ) : (
+                  <span className="text-emerald-400">All SKU stock levels healthy</span>
+                )}
               </div>
             </div>
 
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-3 shadow-sm hover:border-[var(--border-strong)] transition-all">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                  Dead Stock Items
-                </span>
+            {/* Card 3: Dead Stock */}
+            <div className="w-full h-full bg-[#0D0E12] border-[2px] border-black dark:border-white/20 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] dark:shadow-[5px_5px_0px_0px_rgba(255,255,255,0.08)] relative flex flex-col p-5 transition-all duration-200 overflow-hidden rounded-xl hover:border-white/40 hover:shadow-[7px_7px_0px_0px_rgba(242,78,75,0.3)]">
+              <div className="absolute inset-0 opacity-[0.05] pointer-events-none z-0 bg-[radial-gradient(#fff_1.5px,transparent_1.5px)] [background-size:10px_10px]" />
+              <div className="flex items-start justify-between gap-2 mb-3 border-b border-white/10 pb-2.5 z-10">
+                <div>
+                  <h3 className="font-mono text-xs uppercase tracking-widest text-[var(--text-muted)] font-semibold">
+                    Dead Stock (60d)
+                  </h3>
+                  <p className="text-2xl sm:text-3xl font-black tracking-tight text-[var(--text-primary)] mt-1 font-mono">
+                    {deadStockCount} <span className="text-xs text-[var(--text-muted)] font-normal">SKUs</span>
+                  </p>
+                </div>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400">
                   <Clock className="size-4" />
                 </span>
               </div>
-              <div>
-                <p className="text-2xl font-bold font-mono tracking-tight text-[var(--text-primary)]">
-                  {statsData?.deadStockCount ?? 0} <span className="text-xs text-[var(--text-muted)] font-normal">SKUs</span>
-                </p>
-                <p className="text-[11px] text-[var(--text-muted)] font-mono mt-1">
-                  Idle (no movement in 60d)
-                </p>
+              <div className="relative z-10 text-xs font-mono text-[var(--text-muted)] mt-auto">
+                No stock movement recorded in 60 days
               </div>
             </div>
 
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-3 shadow-sm hover:border-[var(--border-strong)] transition-all">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                  Expiring Soon
-                </span>
+            {/* Card 4: Expiring Soon */}
+            <div className="w-full h-full bg-[#0D0E12] border-[2px] border-black dark:border-white/20 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] dark:shadow-[5px_5px_0px_0px_rgba(255,255,255,0.08)] relative flex flex-col p-5 transition-all duration-200 overflow-hidden rounded-xl hover:border-white/40 hover:shadow-[7px_7px_0px_0px_rgba(242,78,75,0.3)]">
+              <div className="absolute inset-0 opacity-[0.05] pointer-events-none z-0 bg-[radial-gradient(#fff_1.5px,transparent_1.5px)] [background-size:10px_10px]" />
+              <div className="flex items-start justify-between gap-2 mb-3 border-b border-white/10 pb-2.5 z-10">
+                <div>
+                  <h3 className="font-mono text-xs uppercase tracking-widest text-[var(--text-muted)] font-semibold">
+                    Expiring Soon
+                  </h3>
+                  <p className="text-2xl sm:text-3xl font-black tracking-tight text-[var(--text-primary)] mt-1 font-mono">
+                    {expiringCount} <span className="text-xs text-[var(--text-muted)] font-normal">SKUs</span>
+                  </p>
+                </div>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-400">
                   <CalendarDays className="size-4" />
                 </span>
               </div>
-              <div>
-                <p className="text-2xl font-bold font-mono tracking-tight text-[var(--text-primary)]">
-                  {statsData?.expiringCount ?? 0} <span className="text-xs text-[var(--text-muted)] font-normal">SKUs</span>
-                </p>
-                <p className="text-[11px] text-purple-400 font-mono mt-1">
-                  Expires within 30 days
-                </p>
+              <div className="relative z-10 text-xs font-mono text-purple-400 mt-auto">
+                {expiringCount > 0 ? "Expires in next 30 days" : "No batches expiring soon"}
               </div>
             </div>
           </div>
 
-          {/* 2. Stock-by-Location Bar Chart */}
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          {/* 2. Location Distribution Chart Card (Matching Bento Style) */}
+          <div className="w-full bg-[#0D0E12] border-[2px] border-black dark:border-white/20 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] dark:shadow-[5px_5px_0px_0px_rgba(255,255,255,0.08)] rounded-xl p-5 sm:p-6 space-y-4 relative overflow-hidden">
+            <div className="absolute inset-0 opacity-[0.04] pointer-events-none z-0 bg-[radial-gradient(#fff_1.5px,transparent_1.5px)] [background-size:10px_10px]" />
+
+            <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
               <div>
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-primary)] flex items-center gap-2">
                   <MapPin className="size-4 text-[var(--accent)]" />
                   Stock Distribution by Location
                 </h2>
-                <p className="text-xs text-[var(--text-muted)]">
-                  Comparative breakdown of Healthy, Low, and Out-of-stock items across fulfillment centers.
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  Breakdown of Healthy, Low, and Out-of-Stock SKUs across fulfillment hubs.
                 </p>
               </div>
-              <div className="flex items-center gap-4 text-xs font-mono text-[var(--text-muted)]">
+
+              {/* Per-location valuation pills */}
+              <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
                 {stockByLocationData.map((loc: any) => (
-                  <span key={loc.locationId} className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
-                    {loc.locationCode}: <strong className="text-[var(--text-primary)]">${loc.stockValue.toLocaleString()}</strong>
+                  <span
+                    key={loc.locationId}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-secondary)]"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+                    <span>{loc.locationCode}:</span>
+                    <strong className="text-[var(--text-primary)]">${loc.stockValue.toLocaleString()}</strong>
                   </span>
                 ))}
               </div>
             </div>
 
-            <div className="h-56 w-full pt-2">
+            <div className="relative z-10 h-60 w-full pt-1">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={stockByLocationData} barGap={6}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" vertical={false} />
                   <XAxis dataKey="locationCode" stroke="#71717a" fontSize={11} tickLine={false} />
                   <YAxis stroke="#71717a" fontSize={11} tickLine={false} />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#18181b",
-                      borderColor: "#3f3f46",
+                      backgroundColor: "#0D0E12",
+                      borderColor: "rgba(255,255,255,0.15)",
                       borderRadius: "8px",
                       fontSize: "12px",
                       color: "#fff",
+                      boxShadow: "0 10px 25px -5px rgba(0,0,0,0.5)",
                     }}
                   />
-                  <Legend />
+                  <Legend
+                    wrapperStyle={{ paddingTop: "12px", fontSize: "12px" }}
+                  />
                   <Bar dataKey="healthy" fill="rgb(16,185,129)" radius={[4, 4, 0, 0]} name="Healthy Stock" />
                   <Bar dataKey="low" fill="rgb(245,158,11)" radius={[4, 4, 0, 0]} name="Low Stock" />
                   <Bar dataKey="out" fill="rgb(244,63,94)" radius={[4, 4, 0, 0]} name="Out of Stock" />
@@ -399,71 +494,99 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          {/* 3. Sortable & Filterable Table Section */}
+          {/* 3. Reorganized Search, Filter & Table Area */}
           <div className="space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-[var(--surface)] p-4 rounded-xl border border-[var(--border)]">
-              <div className="relative flex-1 min-w-[240px]">
+            {/* Integrated Toolbar */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-[var(--surface)] p-3.5 rounded-xl border border-[var(--border)]">
+              {/* Search Bar */}
+              <div className="relative flex-1 min-w-[260px]">
                 <Search className="absolute left-3 top-2.5 size-4 text-[var(--text-muted)]" />
                 <input
                   type="text"
                   placeholder="Search by SKU, product name, or barcode..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] pl-9 pr-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]"
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] pl-9 pr-8 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] transition-colors"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-2.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
               </div>
 
+              {/* Filters Cluster */}
               <div className="flex flex-wrap items-center gap-2">
+                {/* Category Filter */}
                 <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)]">
                   <Filter className="size-3.5 text-[var(--text-muted)]" />
                   <select
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="bg-transparent font-mono focus:outline-none text-[var(--text-primary)]"
+                    className="bg-transparent font-mono focus:outline-none text-[var(--text-primary)] text-xs cursor-pointer"
                   >
-                    <option value="ALL">All Categories</option>
+                    <option value="ALL" className="bg-[#0D0E12] text-white">All Categories</option>
                     {categories.map((c: any) => (
-                      <option key={c.id} value={c.id}>
+                      <option key={c.id} value={c.id} className="bg-[#0D0E12] text-white">
                         {c.name}
                       </option>
                     ))}
                   </select>
                 </div>
 
+                {/* Location Filter */}
                 <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)]">
                   <MapPin className="size-3.5 text-[var(--text-muted)]" />
                   <select
                     value={selectedLocation}
                     onChange={(e) => setSelectedLocation(e.target.value)}
-                    className="bg-transparent font-mono focus:outline-none text-[var(--text-primary)]"
+                    className="bg-transparent font-mono focus:outline-none text-[var(--text-primary)] text-xs cursor-pointer"
                   >
-                    <option value="ALL">All Locations</option>
+                    <option value="ALL" className="bg-[#0D0E12] text-white">All Locations</option>
                     {locations.map((l: any) => (
-                      <option key={l.id} value={l.id}>
+                      <option key={l.id} value={l.id} className="bg-[#0D0E12] text-white">
                         {l.code} ({l.name})
                       </option>
                     ))}
                   </select>
                 </div>
 
+                {/* Status Filter */}
                 <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)]">
                   <SlidersHorizontal className="size-3.5 text-[var(--text-muted)]" />
                   <select
                     value={selectedStatus}
                     onChange={(e) => setSelectedStatus(e.target.value)}
-                    className="bg-transparent font-mono focus:outline-none text-[var(--text-primary)]"
+                    className="bg-transparent font-mono focus:outline-none text-[var(--text-primary)] text-xs cursor-pointer"
                   >
-                    <option value="ALL">All Statuses</option>
-                    <option value="HEALTHY">Healthy</option>
-                    <option value="LOW">Low Stock</option>
-                    <option value="OUT">Out of Stock</option>
-                    <option value="OVERSTOCKED">Overstocked</option>
-                    <option value="EXPIRING">Expiring Soon</option>
+                    <option value="ALL" className="bg-[#0D0E12] text-white">All Statuses</option>
+                    <option value="HEALTHY" className="bg-[#0D0E12] text-white">Healthy</option>
+                    <option value="LOW" className="bg-[#0D0E12] text-white">Low Stock</option>
+                    <option value="OUT" className="bg-[#0D0E12] text-white">Out of Stock</option>
+                    <option value="OVERSTOCKED" className="bg-[#0D0E12] text-white">Overstocked</option>
+                    <option value="EXPIRING" className="bg-[#0D0E12] text-white">Expiring Soon</option>
                   </select>
                 </div>
+
+                {/* Clear filters shortcut */}
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="flex items-center gap-1 text-[11px] font-mono text-[var(--text-muted)] hover:text-[var(--accent)] px-2 py-1.5 rounded transition-colors"
+                  >
+                    <X className="size-3" />
+                    <span>Reset</span>
+                  </button>
+                )}
               </div>
             </div>
 
+            {/* Error Message */}
             {itemsError && (
               <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 flex items-center justify-between text-xs text-rose-400">
                 <div className="flex items-center gap-2">
@@ -471,49 +594,49 @@ export default function InventoryPage() {
                   <span>Failed to load inventory items: {itemsError.message}</span>
                 </div>
                 <button
+                  type="button"
                   onClick={() => mutateItems()}
-                  className="rounded-md bg-rose-500/20 px-3 py-1 font-semibold hover:bg-rose-500/30"
+                  className="rounded-md bg-rose-500/20 px-3 py-1 font-semibold hover:bg-rose-500/30 transition-colors"
                 >
                   Retry
                 </button>
               </div>
             )}
 
-            {items.length === 0 && !itemsLoading ? (
+            {/* Empty State */}
+            {!itemsError && items.length === 0 && !itemsLoading ? (
               <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-12 text-center space-y-3">
                 <Package className="size-10 text-[var(--text-muted)] mx-auto opacity-50" />
                 <div>
                   <h3 className="text-sm font-semibold text-[var(--text-primary)]">No inventory items found</h3>
                   <p className="text-xs text-[var(--text-muted)] mt-1">
-                    {searchQuery || selectedCategory !== "ALL" || selectedStatus !== "ALL"
+                    {hasActiveFilters
                       ? "No items match your active search or filter criteria."
-                      : "No inventory items yet in this store. Add your first item to begin tracking stock."}
+                      : "No inventory items recorded yet in this workspace. Add your first SKU to begin tracking."}
                   </p>
                 </div>
                 <div className="flex items-center justify-center gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery("");
-                      setSelectedCategory("ALL");
-                      setSelectedLocation("ALL");
-                      setSelectedStatus("ALL");
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--surface-elevated)] hover:bg-[var(--surface)] text-xs text-[var(--text-primary)] border border-[var(--border)] transition-colors"
-                  >
-                    Clear Filters
-                  </button>
+                  {hasActiveFilters && (
+                    <button
+                      type="button"
+                      onClick={clearAllFilters}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--surface-elevated)] hover:bg-[var(--surface)] text-xs text-[var(--text-primary)] border border-[var(--border)] transition-colors"
+                    >
+                      Clear Filters
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setIsAddItemOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[var(--accent)] text-black text-xs font-semibold hover:opacity-90 transition-opacity"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[var(--accent)] text-white text-xs font-semibold hover:opacity-90 transition-opacity"
                   >
                     <Plus className="size-3.5" />
-                    <span>+ Add First Item</span>
+                    <span>Add Item</span>
                   </button>
                 </div>
               </div>
             ) : (
+              /* Enhanced Data Table */
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-x-auto shadow-sm">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-[var(--surface-elevated)] border-b border-[var(--border)] font-mono text-[10px] uppercase tracking-wider text-[var(--text-muted)] select-none">
@@ -629,9 +752,9 @@ export default function InventoryPage() {
 
                           <td
                             onClick={() => setSelectedItemId(item.id)}
-                            className="px-4 py-3.5 cursor-pointer"
+                            className="px-4 py-3.5 cursor-pointer max-w-xs"
                           >
-                            <p className="font-semibold text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
+                            <p className="font-semibold text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors truncate">
                               {item.name}
                             </p>
                             {item.description && (
@@ -706,8 +829,8 @@ export default function InventoryPage() {
                               }}
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[var(--surface-elevated)] hover:bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border-strong)] text-[11px] font-semibold transition-colors"
                             >
-                              <span className="text-emerald-400">+</span>
-                              <span className="text-rose-400">−</span>
+                              <span className="text-emerald-400 font-bold">+</span>
+                              <span className="text-rose-400 font-bold">−</span>
                               <span>Adjust</span>
                             </button>
                           </td>
@@ -729,9 +852,16 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* ── TAB 2: SUPPLIERS & PURCHASE ORDERS ── */}
+      {/* ── TAB 2: STOCK MOVEMENTS AUDIT LOG ── */}
+      {activeTab === "MOVEMENTS" && (
+        <div className="animate-in fade-in duration-200">
+          <StockMovementsView />
+        </div>
+      )}
+
+      {/* ── TAB 3: SUPPLIERS & PURCHASE ORDERS ── */}
       {activeTab === "SUPPLIERS_POS" && (
-        <div className="animate-in fade-in duration-150">
+        <div className="animate-in fade-in duration-200">
           <SuppliersPOView
             suppliers={suppliers}
             purchaseOrders={purchaseOrders}
@@ -764,13 +894,6 @@ export default function InventoryPage() {
               void mutateItems();
             }}
           />
-        </div>
-      )}
-
-      {/* ── TAB 3: STOCK MOVEMENTS AUDIT LOG ── */}
-      {activeTab === "MOVEMENTS" && (
-        <div className="space-y-6">
-          <StockMovementsView />
         </div>
       )}
 

@@ -126,6 +126,8 @@ model Organization {
   notificationLogs        NotificationLog[]
   orgCounters             OrgCounter[]
   conversationReads       ConversationRead[]
+  onboarding              OrganizationOnboarding?
+  paymentTransactions     PaymentTransaction[]
 
   @@map("organizations")
 }
@@ -140,6 +142,7 @@ model User {
   role           Role     @default(MEMBER)
   avatarInitials String
   isRFTeam       Boolean  @default(false)
+  jobTitle       String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -514,6 +517,7 @@ model Invitation {
   invitedById    String
   email          String
   role           Role             @default(MEMBER)
+  jobTitle       String?
   token          String           @unique // HMAC-signed token sent in the invite link
   status         InvitationStatus @default(PENDING)
   expiresAt      DateTime
@@ -809,6 +813,9 @@ model CustomerConversation {
   resolvedAt         DateTime?
   closedAt           DateTime?
   escalationReason   String?
+  aiIntent           String?
+  aiSummary          String?
+  aiContextJson      String?
   createdAt          DateTime                     @default(now())
   updatedAt          DateTime                     @updatedAt
 
@@ -839,6 +846,9 @@ model CustomerMessage {
   providerMessageId String?
   attachmentsJson   String?               @default("[]")
   transcript        String?
+  emailSubject      String?
+  emailHeadersJson  String?
+  status            String?               // sent, delivered, read, failed
   createdAt         DateTime              @default(now())
 
   organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1380,7 +1390,8 @@ model Plan {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
-  subscriptions Subscription[]
+  subscriptions       Subscription[]
+  paymentTransactions PaymentTransaction[]
 
   @@index([isActive, sortOrder])
   @@map("plans")
@@ -1490,3 +1501,59 @@ model AdminAuditLog {
   @@index([action, createdAt])
   @@map("admin_audit_logs")
 }
+
+// ─── 20. Onboarding & Payment Transactions ─────────────────────────────────────
+
+model PaymentTransaction {
+  id             String   @id @default(cuid())
+  organizationId String
+  planId         String
+  provider       String   @default("simulated")
+  reference      String   @unique
+  idempotencyKey String?  @unique
+  amount         Int
+  currency       String   @default("USD")
+  status         String   @default("PENDING")
+  paymentMethod  String
+  maskedDetails  String?
+  errorMessage   String?
+  rawResponse    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan         Plan         @relation(fields: [planId], references: [id])
+
+  @@index([organizationId])
+  @@index([reference])
+  @@map("payment_transactions")
+}
+
+model OrganizationOnboarding {
+  id                   String    @id @default(cuid())
+  organizationId       String    @unique
+  currentStep          Int       @default(1)
+  completed            Boolean   @default(false)
+  companyName          String?
+  businessType         String?
+  customBusinessType   String?
+  website              String?
+  companySize          String?
+  location             String?
+  description          String?
+  operationalActivities String?
+  challenges           String?
+  monitoringAreas      String?
+  alertPreferences     String?
+  priorities           String?
+  invitedMembers       String?
+  completedAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("organization_onboardings")
+}
+

@@ -78,17 +78,24 @@ export async function GET(request: Request): Promise<Response> {
 
   const isEmployee = session.role === "CLIENT_EMPLOYEE";
 
-  const rows = await prisma.customerConversation.findMany({
+  const rawIntent = url.searchParams.get("intent")?.toUpperCase();
+  const intentFilter = rawIntent || undefined;
+
+  const rows: any[] = await (prisma.customerConversation as any).findMany({
     where: {
       organizationId: session.organizationId,
       ...(isEmployee ? { assignedEmployeeId: session.userId } : {}),
       ...(statusFilter ? { status: statusFilter } : {}),
       ...(channelFilter ? { channel: channelFilter } : {}),
+      ...(intentFilter ? { aiIntent: intentFilter } : {}),
       ...(search
         ? {
             OR: [
               { customer: { name: { contains: search, mode: "insensitive" } } },
               { customer: { company: { contains: search, mode: "insensitive" } } },
+              { customer: { email: { contains: search, mode: "insensitive" } } },
+              { customer: { phone: { contains: search, mode: "insensitive" } } },
+              { customer: { whatsapp: { contains: search, mode: "insensitive" } } },
               { lastMessagePreview: { contains: search, mode: "insensitive" } },
             ],
           }
@@ -103,6 +110,9 @@ export async function GET(request: Request): Promise<Response> {
       status: true,
       priority: true,
       subject: true,
+      aiIntent: true,
+      aiSummary: true,
+      aiContextJson: true,
       lastMessageAt: true,
       lastMessagePreview: true,
       escalationReason: true,
@@ -138,7 +148,7 @@ export async function GET(request: Request): Promise<Response> {
 
   const conversations = list.map((c) => {
     const lastReadAt = c.reads[0]?.lastReadAt ? new Date(c.reads[0].lastReadAt) : new Date(0);
-    const unreadCount = c.messages.filter((m) => m.createdAt > lastReadAt).length;
+    const unreadCount = c.messages.filter((m: any) => m.createdAt > lastReadAt).length;
 
     return {
       id: c.id,
@@ -146,6 +156,9 @@ export async function GET(request: Request): Promise<Response> {
       status: c.status,
       priority: c.priority,
       subject: c.subject,
+      aiIntent: c.aiIntent,
+      aiSummary: c.aiSummary,
+      aiContextJson: c.aiContextJson,
       lastMessageAt: c.lastMessageAt.toISOString(),
       lastMessagePreview: c.lastMessagePreview,
       escalationReason: c.escalationReason,

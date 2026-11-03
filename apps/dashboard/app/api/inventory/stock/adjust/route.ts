@@ -72,13 +72,20 @@ export async function POST(request: Request): Promise<Response> {
   });
 
   if (!item) {
-    const product = await prisma.product.findFirst({
-      where: {
-        organizationId: session.organizationId,
-        OR: [{ id: data.itemId }, { sku: data.itemId }],
-      },
-      include: { inventoryLevel: true },
-    });
+    let product: any = null;
+    try {
+      if (typeof (prisma as any).product?.findFirst === "function") {
+        product = await prisma.product.findFirst({
+          where: {
+            organizationId: session.organizationId,
+            OR: [{ id: data.itemId }, { sku: data.itemId }],
+          },
+          include: { inventoryLevel: true },
+        });
+      }
+    } catch {
+      product = null;
+    }
 
     if (product) {
       let effectiveDelta = 0;

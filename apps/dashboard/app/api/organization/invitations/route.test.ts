@@ -8,6 +8,7 @@ const h = vi.hoisted(() => {
     invitedById: "usr_admin",
     email: "new@acme.com",
     role: "MEMBER",
+    jobTitle: "Software Engineer",
     token: "tok_abc",
     status: "PENDING",
     expiresAt: new Date(Date.now() + 7 * 86_400_000),
@@ -20,6 +21,7 @@ const h = vi.hoisted(() => {
   const invCreate = vi.fn(async () => ({ ...invitation }));
   const invUpdate = vi.fn(async () => ({ ...invitation }));
   const invUpdateMany = vi.fn(async () => ({ count: 0 }));
+  const invCount = vi.fn(async () => 0);
 
   const userFindUnique = vi.fn(async (args: { where: { email: string } }) => {
     if (args.where.email === "existing@acme.com")
@@ -28,10 +30,20 @@ const h = vi.hoisted(() => {
       return { id: "usr_other", organizationId: "org_b" };
     return null;
   });
+  const userCount = vi.fn(async () => 1);
 
-  const orgFindUnique = vi.fn(async () => ({ name: "Acme Corp" }));
+  const orgFindUnique = vi.fn(async () => ({
+    id: "org_a",
+    name: "Acme Corp",
+    plan: "Enterprise",
+    subscriptions: [],
+  }));
   const auditCreate = vi.fn(async () => ({}));
-  const sendEmail = vi.fn(async () => ({ delivered: true, provider: "console" }));
+  const sendEmail = vi.fn(async () => ({
+    delivered: true,
+    provider: "smtp",
+    providerMessageId: "msg_smtp_123",
+  }));
 
   const getSession = vi.fn<() => Promise<Session | null>>();
 
@@ -41,14 +53,22 @@ const h = vi.hoisted(() => {
     invCreate,
     invUpdate,
     invUpdateMany,
+    invCount,
     userFindUnique,
+    userCount,
     orgFindUnique,
     auditCreate,
     sendEmail,
     getSession,
     prisma: {
-      invitation: { findMany: invFindMany, create: invCreate, update: invUpdate, updateMany: invUpdateMany },
-      user: { findUnique: userFindUnique },
+      invitation: {
+        findMany: invFindMany,
+        create: invCreate,
+        update: invUpdate,
+        updateMany: invUpdateMany,
+        count: invCount,
+      },
+      user: { findUnique: userFindUnique, count: userCount },
       organization: { findUnique: orgFindUnique },
       auditLog: { create: auditCreate },
     },
@@ -71,7 +91,7 @@ import { GET, POST } from "./route";
 
 function adminSession(): Session {
   return {
-          mode: "CLIENT",
+    mode: "CLIENT",
     userId: "usr_admin",
     organizationId: "org_a",
     name: "Admin",
@@ -82,7 +102,7 @@ function adminSession(): Session {
 
 function memberSession(): Session {
   return {
-          mode: "CLIENT",
+    mode: "CLIENT",
     userId: "usr_member",
     organizationId: "org_a",
     name: "Member",
@@ -134,7 +154,9 @@ describe("GET /api/organization/invitations", () => {
 describe("POST /api/organization/invitations", () => {
   it("creates an invitation, patches the token, and sends an email", async () => {
     h.getSession.mockResolvedValue(adminSession());
-    const res = await POST(postRequest({ email: "new@acme.com", role: "MEMBER" }));
+    const res = await POST(
+      postRequest({ email: "new@acme.com", role: "MEMBER", jobTitle: "Software Engineer" }),
+    );
     expect(res.status).toBe(201);
     // Row created with placeholder token
     expect(h.invCreate).toHaveBeenCalledWith(
@@ -143,6 +165,7 @@ describe("POST /api/organization/invitations", () => {
           organizationId: "org_a",
           email: "new@acme.com",
           role: "MEMBER",
+          jobTitle: "Software Engineer",
           token: "pending",
         }),
       }),
@@ -165,7 +188,9 @@ describe("POST /api/organization/invitations", () => {
 
   it("accepts ADMIN role", async () => {
     h.getSession.mockResolvedValue(adminSession());
-    const res = await POST(postRequest({ email: "new@acme.com", role: "ADMIN" }));
+    const res = await POST(
+      postRequest({ email: "new@acme.com", role: "ADMIN", jobTitle: "Lead Architect" }),
+    );
     expect(res.status).toBe(201);
     expect(h.invCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ role: "ADMIN" }) }),
@@ -174,7 +199,9 @@ describe("POST /api/organization/invitations", () => {
 
   it("normalises role to uppercase", async () => {
     h.getSession.mockResolvedValue(adminSession());
-    await POST(postRequest({ email: "new@acme.com", role: "member" }));
+    await POST(
+      postRequest({ email: "new@acme.com", role: "member", jobTitle: "Analyst" }),
+    );
     expect(h.invCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ role: "MEMBER" }) }),
     );
@@ -182,45 +209,57 @@ describe("POST /api/organization/invitations", () => {
 
   it("returns 409 when the email is already a member of this org", async () => {
     h.getSession.mockResolvedValue(adminSession());
-    const res = await POST(postRequest({ email: "existing@acme.com" }));
+    const res = await POST(
+      postRequest({ email: "existing@acme.com", jobTitle: "Designer" }),
+    );
     expect(res.status).toBe(409);
     expect(h.invCreate).not.toHaveBeenCalled();
   });
 
   it("returns 409 when the email belongs to another org", async () => {
     h.getSession.mockResolvedValue(adminSession());
-    const res = await POST(postRequest({ email: "other@other.com" }));
+    const res = await POST(
+      postRequest({ email: "other@other.com", jobTitle: "Manager" }),
+    );
     expect(res.status).toBe(409);
     expect(h.invCreate).not.toHaveBeenCalled();
   });
 
   it("returns 400 for a missing email", async () => {
     h.getSession.mockResolvedValue(adminSession());
-    const res = await POST(postRequest({ role: "MEMBER" }));
+    const res = await POST(postRequest({ role: "MEMBER", jobTitle: "Dev" }));
     expect(res.status).toBe(400);
   });
 
   it("returns 400 for a malformed email", async () => {
     h.getSession.mockResolvedValue(adminSession());
-    const res = await POST(postRequest({ email: "notanemail" }));
+    const res = await POST(postRequest({ email: "notanemail", jobTitle: "Dev" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 for a missing jobTitle", async () => {
+    h.getSession.mockResolvedValue(adminSession());
+    const res = await POST(postRequest({ email: "new@acme.com", role: "MEMBER" }));
     expect(res.status).toBe(400);
   });
 
   it("returns 400 for an invalid role", async () => {
     h.getSession.mockResolvedValue(adminSession());
-    const res = await POST(postRequest({ email: "new@acme.com", role: "MANAGER" }));
+    const res = await POST(
+      postRequest({ email: "new@acme.com", role: "MANAGER", jobTitle: "Dev" }),
+    );
     expect(res.status).toBe(400);
   });
 
   it("returns 403 for a non-Admin", async () => {
     h.getSession.mockResolvedValue(memberSession());
-    const res = await POST(postRequest({ email: "new@acme.com" }));
+    const res = await POST(postRequest({ email: "new@acme.com", jobTitle: "Dev" }));
     expect(res.status).toBe(403);
   });
 
   it("returns 401 without a session", async () => {
     h.getSession.mockResolvedValue(null);
-    const res = await POST(postRequest({ email: "new@acme.com" }));
+    const res = await POST(postRequest({ email: "new@acme.com", jobTitle: "Dev" }));
     expect(res.status).toBe(401);
   });
 });

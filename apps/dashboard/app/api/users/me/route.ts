@@ -22,6 +22,7 @@ export async function GET(): Promise<Response> {
       name: true,
       email: true,
       role: true,
+      jobTitle: true,
       avatarInitials: true,
       isRFTeam: true,
       createdAt: true,
@@ -57,9 +58,11 @@ export async function PATCH(request: Request): Promise<Response> {
     typeof body.avatarInitials === "string"
       ? body.avatarInitials.trim().toUpperCase()
       : undefined;
+  const jobTitle =
+    typeof body.jobTitle === "string" ? body.jobTitle.trim() : undefined;
 
-  if (name === undefined && email === undefined && avatarInitials === undefined) {
-    return json({ error: "Provide at least one of: name, email, avatarInitials" }, 400);
+  if (name === undefined && email === undefined && avatarInitials === undefined && jobTitle === undefined) {
+    return json({ error: "Provide at least one of: name, email, avatarInitials, jobTitle" }, 400);
   }
   if (name !== undefined && (name.length === 0 || name.length > MAX_NAME_LENGTH)) {
     return json({ error: `Name must be 1–${MAX_NAME_LENGTH} characters` }, 400);
@@ -78,12 +81,14 @@ export async function PATCH(request: Request): Promise<Response> {
         ...(name !== undefined ? { name } : {}),
         ...(email !== undefined ? { email } : {}),
         ...(avatarInitials !== undefined ? { avatarInitials } : {}),
+        ...(jobTitle !== undefined ? { jobTitle } : {}),
       },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
+        jobTitle: true,
         avatarInitials: true,
         updatedAt: true,
       },

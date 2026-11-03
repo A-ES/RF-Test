@@ -5,6 +5,9 @@ import {
 } from "@/app/lib/inngest/client";
 import type { NormalizedInboundMessage } from "@/app/lib/messaging/types";
 import { classifyIntent } from "@/app/lib/orders/understand";
+import { analyzeIncomingMessage } from "@/app/lib/messaging/ai-classification";
+import { publishToChannel } from "@/app/lib/realtime/server";
+import { orgChannel, REALTIME_EVENTS } from "@/app/lib/realtime/channels";
 
 const CLOSED_STATUSES = ["CLOSED", "RESOLVED"] as const;
 
@@ -170,8 +173,18 @@ export async function ingestInboundMessage(
       providerMessageId: message.providerMessageId,
       attachmentsJson: message.attachmentsJson ?? "[]",
       transcript: message.transcript ?? null,
+      emailSubject: message.emailSubject ?? null,
+      emailHeadersJson: message.emailHeadersJson ?? null,
+      status: message.status ?? "delivered",
       createdAt: message.receivedAt,
     },
+  });
+
+  // Perform AI message understanding & 11-category classification
+  const textForAi = message.transcript || message.body;
+  const aiUnderstanding = await analyzeIncomingMessage(textForAi, {
+    customerName: message.contactDisplayName,
+    organizationId,
   });
 
   await db.customerConversation.update({
@@ -179,6 +192,9 @@ export async function ingestInboundMessage(
     data: {
       lastMessageAt: message.receivedAt,
       lastMessagePreview: preview,
+      aiIntent: aiUnderstanding.intent,
+      aiSummary: aiUnderstanding.summary,
+      aiContextJson: JSON.stringify(aiUnderstanding),
       status:
         conversation.status === "WAITING_FOR_CUSTOMER"
           ? "AI_HANDLING"
@@ -191,14 +207,34 @@ export async function ingestInboundMessage(
     data: { lastInteractionAt: message.receivedAt },
   });
 
-  // Intent router: ORDER_REQUEST, ORDER_CHANGE, SUPPORT, OTHER
-  const textForIntent = message.transcript || message.body;
-  const intentResult = await classifyIntent(textForIntent);
+  // Broadcast realtime update to organization members
+  try {
+    await publishToChannel(
+      orgChannel(organizationId, "messages"),
+      REALTIME_EVENTS.messageCreated,
+      {
+        conversationId: conversation.id,
+        messageId: created.id,
+        body: message.body,
+        sender: "CUSTOMER",
+        channel: message.channel,
+        aiIntent: aiUnderstanding.intent,
+        aiSummary: aiUnderstanding.summary,
+      },
+    );
+  } catch (rtErr) {
+    // Non-blocking if realtime provider is unavailable in testing
+  }
 
-  if (
-    intentResult.intent === "ORDER_REQUEST" ||
-    intentResult.intent === "ORDER_CHANGE"
-  ) {
+  // Intent router: map to ORDER_REQUEST or ORDER_CHANGE if appropriate
+  let targetOrderIntent: "ORDER_REQUEST" | "ORDER_CHANGE" | null = null;
+  if (aiUnderstanding.intent === "NEW_ORDER") {
+    targetOrderIntent = "ORDER_REQUEST";
+  } else if (aiUnderstanding.intent === "ORDER_MODIFICATION") {
+    targetOrderIntent = "ORDER_CHANGE";
+  }
+
+  if (targetOrderIntent) {
     let inngestSent = false;
     try {
       await inngest.send({
@@ -208,7 +244,7 @@ export async function ingestInboundMessage(
           customerId: customer.id,
           conversationId: conversation.id,
           messageId: created.id,
-          intent: intentResult.intent,
+          intent: targetOrderIntent,
           isNewCustomer: createdCustomer,
         },
       });
@@ -230,7 +266,7 @@ export async function ingestInboundMessage(
           customerId: customer.id,
           conversationId: conversation.id,
           messageId: created.id,
-          intent: intentResult.intent,
+          intent: targetOrderIntent,
           isNewCustomer: createdCustomer,
         });
       } catch (err) {

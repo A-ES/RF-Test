@@ -171,6 +171,16 @@ export interface DashboardData {
   conversationHistory?: ConversationHistoryPoint[];
   /** Real database user role breakdown */
   teamRoles?: TeamRoleCounts;
+  /** Personalized organization profile from onboarding */
+  organizationName?: string;
+  businessType?: string;
+  operationalProfile?: {
+    activities?: string[];
+    challenges?: string[];
+    monitoringAreas?: string[];
+    alertPreferences?: string[];
+    priorities?: string[];
+  };
   /** Per-section error flags indicating which sections failed to load (e.g. timeout or P1001) */
   errors?: SectionErrors;
 }

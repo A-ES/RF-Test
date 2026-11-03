@@ -66,18 +66,27 @@ export async function GET(): Promise<Response> {
     select: { itemId: true },
   });
 
-  const productsPromise = prisma.product.findMany({
-    where: { organizationId: orgId, isActive: true },
-    select: {
-      id: true,
-      sku: true,
-      basePriceMinor: true,
-      reorderLevel: true,
-      inventoryLevel: {
-        select: { onHand: true, reserved: true },
-      },
-    },
-  });
+  const productsPromise = (async () => {
+    try {
+      if (typeof (prisma as any).product?.findMany === "function") {
+        return await prisma.product.findMany({
+          where: { organizationId: orgId, isActive: true },
+          select: {
+            id: true,
+            sku: true,
+            basePriceMinor: true,
+            reorderLevel: true,
+            inventoryLevel: {
+              select: { onHand: true, reserved: true },
+            },
+          },
+        });
+      }
+    } catch {
+      // Catalog products table may not be migrated in the active database
+    }
+    return [];
+  })();
 
   const [locations, items, activeMovements, products] = await Promise.all([
     locationsPromise,

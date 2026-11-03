@@ -75,6 +75,7 @@ export async function POST(request: Request): Promise<Response> {
       organizationId: true,
       email: true,
       role: true,
+      jobTitle: true,
       status: true,
       expiresAt: true,
     },
@@ -134,6 +135,7 @@ export async function POST(request: Request): Promise<Response> {
         passwordHash,
         role: invitation.role,
         avatarInitials: initials,
+        jobTitle: invitation.jobTitle,
       },
       select: { id: true, name: true, email: true, role: true, organizationId: true },
     });

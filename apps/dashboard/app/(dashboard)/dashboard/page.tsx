@@ -76,7 +76,58 @@ export default function DashboardPage() {
         activeProjectsCount={activeProjectsCount}
         alertsCount={data.alerts?.length ?? 0}
         unreadInsightCount={data.unreadInsightCount ?? 0}
+        organizationName={data.organizationName}
+        businessType={data.businessType}
       />
+
+      {/* Operational Telemetry Banner (Configured during onboarding) */}
+      {data.operationalProfile && (
+        <div className="rounded-xl border border-white/10 bg-[#0D0E12] p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="size-2 rounded-full bg-[#F24E4B] animate-pulse" />
+            <div>
+              <span className="font-semibold text-white">
+                Active Telemetry Focus ({data.businessType || "Wholesale"}):
+              </span>{" "}
+              <span className="text-white/70">
+                {data.operationalProfile.monitoringAreas?.slice(0, 2).join(" · ") || "Order intake & Stock velocity"}
+              </span>
+            </div>
+          </div>
+
+          {data.operationalProfile.priorities && data.operationalProfile.priorities.length > 0 && (
+            <div className="text-[11px] font-mono text-[#F24E4B] bg-[#F24E4B]/10 px-2.5 py-1 rounded border border-[#F24E4B]/20">
+              Priority: {data.operationalProfile.priorities[0]}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Clean Zero-Data Workspace Guidance (For freshly onboarded organizations) */}
+      {activeProjectsCount === 0 && (!data.projects || data.projects.length === 0) && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center space-y-3">
+          <h3 className="text-sm font-semibold text-white">
+            Workspace Initialized for {data.organizationName || "Your Organization"}
+          </h3>
+          <p className="text-xs text-white/60 max-w-lg mx-auto">
+            Your telemetry profile is active. Add your first wholesale order, document, or customer conversation to begin populating live telemetry cards.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <a
+              href="/conversations"
+              className="px-3.5 py-1.5 rounded-lg bg-[#F24E4B] text-white font-medium text-xs hover:bg-[#d63f3c] transition-colors"
+            >
+              Start Customer Conversation
+            </a>
+            <a
+              href="/onboarding/presentation"
+              className="px-3.5 py-1.5 rounded-lg bg-white/5 text-white/80 border border-white/10 font-medium text-xs hover:bg-white/10 transition-colors"
+            >
+              View Team Lanyard Badges
+            </a>
+          </div>
+        </div>
+      )}
 
       <Separator className="bg-[var(--border)]" />
 

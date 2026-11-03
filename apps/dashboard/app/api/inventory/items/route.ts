@@ -227,12 +227,20 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   if (!categoryId || categoryId === "ALL") {
-    const products = await prisma.product.findMany({
-      where: productWhere,
-      include: {
-        inventoryLevel: true,
-      },
-    });
+    let products: any[] = [];
+    try {
+      if (typeof (prisma as any).product?.findMany === "function") {
+        products = await prisma.product.findMany({
+          where: productWhere,
+          include: {
+            inventoryLevel: true,
+          },
+        });
+      }
+    } catch {
+      // Catalog products table may not be migrated in the active database
+      products = [];
+    }
 
     for (const p of products) {
       if (existingSkus.has(p.sku.toLowerCase())) continue;

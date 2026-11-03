@@ -24,24 +24,8 @@ export function setMessagingProviderFor(
  * Ingest and the AI-reply job both go through here so a second channel is a
  * new provider module, not a fork of that logic.
  */
-import { sendEmail } from "@/app/lib/email";
-
-export const emailMessagingProvider: MessagingProvider = {
-  name: "email",
-  async parseInbound() {
-    return [];
-  },
-  async sendOutbound(msg) {
-    const res = await sendEmail({
-      to: msg.contactIdentifier,
-      subject: "Update from RF Intelligence",
-      body: msg.body,
-    });
-    return {
-      providerMessageId: `email_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    };
-  },
-};
+import { emailMessagingProvider } from "@/app/lib/messaging/email";
+export { emailMessagingProvider };
 
 import { demoProvider } from "@/app/lib/messaging/demo";
 

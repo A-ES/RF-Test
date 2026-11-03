@@ -4,6 +4,8 @@ import { writeAuditLog } from "@/app/lib/audit";
 import { createInviteToken } from "@/app/lib/invite-token";
 import { sendEmail } from "@/app/lib/email";
 import { rateLimit } from "@/app/lib/rate-limit";
+import { getAppUrl } from "@/app/lib/url";
+import { renderInvitationEmail } from "@/app/lib/email-templates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,39 +20,83 @@ function json(body: unknown, status = 200): Response {
 
 /**
  * List pending invitations for this organization (Admin only).
+ * Includes seat consumption metrics.
  */
 export async function GET(): Promise<Response> {
   const session = await getSession();
   if (!session) return json({ error: "Unauthorized" }, 401);
   if (session.role !== "ADMIN") return json({ error: "Forbidden" }, 403);
 
-  const invitations = await prisma.invitation.findMany({
-    where: {
-      organizationId: session.organizationId,
-      status: "PENDING",
-    },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      email: true,
-      role: true,
-      status: true,
-      expiresAt: true,
-      createdAt: true,
-      invitedBy: { select: { name: true, email: true } },
+  const [invitations, org, memberCount] = await Promise.all([
+    prisma.invitation.findMany({
+      where: {
+        organizationId: session.organizationId,
+        status: "PENDING",
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        jobTitle: true,
+        status: true,
+        expiresAt: true,
+        createdAt: true,
+        invitedBy: { select: { name: true, email: true } },
+      },
+    }),
+    prisma.organization.findUnique({
+      where: { id: session.organizationId },
+      select: {
+        id: true,
+        plan: true,
+        subscriptions: {
+          where: { status: "ACTIVE" },
+          include: { plan: true },
+          take: 1,
+        },
+      },
+    }),
+    prisma.user.count({
+      where: {
+        organizationId: session.organizationId,
+        id: { not: session.userId },
+      },
+    }),
+  ]);
+
+  const activeSub = org?.subscriptions[0];
+  const planSlug = activeSub?.plan?.slug ?? (org?.plan === "Enterprise" ? "enterprise" : "rf-pro");
+  const maxAdditionalSeats =
+    org?.plan === "Enterprise" || org?.id === "org_acme"
+      ? 50
+      : planSlug === "rf-ultra"
+      ? 10
+      : 4;
+
+  const pendingCount = invitations.length;
+  const totalUsed = memberCount + pendingCount;
+  const availableSeats = Math.max(0, maxAdditionalSeats - totalUsed);
+
+  return json({
+    invitations,
+    seats: {
+      planName: activeSub?.plan?.name ?? (org?.plan || "RF Pro"),
+      maxAdditionalSeats,
+      activeMembers: memberCount,
+      pendingInvitations: pendingCount,
+      totalUsed,
+      availableSeats,
     },
   });
-
-  return json({ invitations });
 }
 
 /**
  * Send an invitation email to a new team member (Admin only).
- *
+ * - Enforces seat limits server-side.
+ * - Stores professional role (jobTitle).
  * - Rate-limited to 10 invites per admin per minute.
- * - Re-uses an existing PENDING invite for the same email (idempotent).
- * - Creates a signed token embedded in the accept URL.
- * - Writes an AuditLog entry.
+ * - Creates cryptographic HMAC signed token.
  */
 export async function POST(request: Request): Promise<Response> {
   const session = await getSession();
@@ -72,31 +118,92 @@ export async function POST(request: Request): Promise<Response> {
   const body = (payload ?? {}) as Record<string, unknown>;
   const email =
     typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const name =
+    typeof body.name === "string" ? body.name.trim() : "";
+  const jobTitle =
+    typeof body.jobTitle === "string" ? body.jobTitle.trim() : "";
   const roleRaw =
     typeof body.role === "string" ? body.role.trim().toUpperCase() : "MEMBER";
 
   if (!email || !email.includes("@")) {
     return json({ error: "A valid email address is required" }, 400);
   }
+  if (!jobTitle) {
+    return json({ error: "A professional role is required" }, 400);
+  }
   if (!VALID_ROLES.includes(roleRaw as InviteRole)) {
-    return json({ error: `role must be one of: ${VALID_ROLES.join(", ")}` }, 400);
+    return json({ error: `Security role must be one of: ${VALID_ROLES.join(", ")}` }, 400);
   }
   const role = roleRaw as InviteRole;
 
-  // Block inviting an email that already belongs to an org member.
+  // Block inviting self
+  if (email === session.email.toLowerCase()) {
+    return json({ error: "You cannot invite your own email address" }, 400);
+  }
+
+  // Block inviting an email that already belongs to an existing user
   const existingUser = await prisma.user.findUnique({
     where: { email },
     select: { organizationId: true },
   });
   if (existingUser) {
     if (existingUser.organizationId === session.organizationId) {
-      return json({ error: "That person is already a member of your organization" }, 409);
+      return json({ error: "That person is already an active member of your organization" }, 409);
     }
-    return json({ error: "That email is already registered" }, 409);
+    return json({ error: "That email is already registered to another account" }, 409);
   }
 
-  // Revoke any existing PENDING invites for this email in this org so only
-  // one token is ever live at a time.
+  // Enforce plan seat limits server-side
+  const org = await prisma.organization.findUnique({
+    where: { id: session.organizationId },
+    select: {
+      name: true,
+      plan: true,
+      subscriptions: {
+        where: { status: "ACTIVE" },
+        include: { plan: true },
+        take: 1,
+      },
+    },
+  });
+
+  const activeSub = org?.subscriptions[0];
+  const planSlug = activeSub?.plan?.slug ?? (org?.plan === "Enterprise" ? "enterprise" : "rf-pro");
+  const maxAdditionalSeats =
+    org?.plan === "Enterprise" || session.organizationId === "org_acme"
+      ? 50
+      : planSlug === "rf-ultra"
+      ? 10
+      : 4;
+
+  const [memberCount, pendingCount] = await Promise.all([
+    prisma.user.count({
+      where: {
+        organizationId: session.organizationId,
+        id: { not: session.userId },
+      },
+    }),
+    prisma.invitation.count({
+      where: {
+        organizationId: session.organizationId,
+        status: "PENDING",
+      },
+    }),
+  ]);
+
+  const totalUsed = memberCount + pendingCount;
+  if (totalUsed >= maxAdditionalSeats) {
+    return json(
+      {
+        error: `Your ${activeSub?.plan?.name ?? "selected"} plan limit has been reached (${totalUsed}/${maxAdditionalSeats} seats used). Upgrade to add more members.`,
+        seatsUsed: totalUsed,
+        maxAdditionalSeats,
+      },
+      400
+    );
+  }
+
+  // Revoke any existing PENDING invites for this email in this org so only one token is live
   await prisma.invitation.updateMany({
     where: {
       organizationId: session.organizationId,
@@ -108,20 +215,21 @@ export async function POST(request: Request): Promise<Response> {
 
   const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
 
-  // Create the invitation row first so we have an id for the token payload.
+  // Create the invitation row with jobTitle
   const invitation = await prisma.invitation.create({
     data: {
       organizationId: session.organizationId,
       invitedById: session.userId,
       email,
       role,
-      token: "pending", // replaced in the next step
+      jobTitle,
+      token: "pending",
       expiresAt,
     },
-    select: { id: true, email: true, role: true, expiresAt: true },
+    select: { id: true, email: true, role: true, jobTitle: true, expiresAt: true },
   });
 
-  // Sign the token with the invitation id embedded so it can be looked up.
+  // Sign the token with the invitation id embedded
   const token = createInviteToken(invitation.id);
 
   await prisma.invitation.update({
@@ -129,28 +237,26 @@ export async function POST(request: Request): Promise<Response> {
     data: { token },
   });
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+  const appUrl = getAppUrl(request);
   const acceptUrl = `${appUrl}/accept-invitation?token=${encodeURIComponent(token)}`;
 
-  const org = await prisma.organization.findUnique({
-    where: { id: session.organizationId },
-    select: { name: true },
+  // Render responsive HTML + plain-text invitation templates
+  const emailContent = renderInvitationEmail({
+    recipientName: name,
+    inviterName: session.name,
+    organizationName: org?.name ?? "RF Intelligence",
+    jobTitle,
+    role,
+    acceptUrl,
+    expiresDays: 7,
   });
 
-  await sendEmail({
+  // Send invitation email through configured provider (SMTP or console)
+  const emailResult = await sendEmail({
     to: email,
-    subject: `You've been invited to join ${org?.name ?? "RF Intelligence"}`,
-    body: [
-      `Hi there,`,
-      ``,
-      `${session.name} has invited you to join ${org?.name ?? "RF Intelligence"} on RF Intelligence as a ${role}.`,
-      ``,
-      `Accept your invitation and set your password here:`,
-      acceptUrl,
-      ``,
-      `This link expires in 7 days.`,
-    ].join("\n"),
+    subject: emailContent.subject,
+    body: emailContent.text,
+    html: emailContent.html,
   });
 
   await writeAuditLog({
@@ -159,11 +265,15 @@ export async function POST(request: Request): Promise<Response> {
     action: "INVITATION_SENT",
     entityType: "Invitation",
     entityId: invitation.id,
-    metadata: { email, role },
+    metadata: {
+      email,
+      role,
+      jobTitle,
+      emailDelivered: emailResult.delivered,
+      provider: emailResult.provider,
+      providerMessageId: emailResult.providerMessageId,
+    },
   });
-
-  const { notifyOrgDataChanged } = await import("@/app/lib/data-sync");
-  await notifyOrgDataChanged(session.organizationId, ["team"]);
 
   return json(
     {
@@ -171,9 +281,72 @@ export async function POST(request: Request): Promise<Response> {
         id: invitation.id,
         email: invitation.email,
         role: invitation.role,
+        jobTitle: invitation.jobTitle,
         expiresAt: invitation.expiresAt.toISOString(),
       },
+      emailDelivery: {
+        delivered: emailResult.delivered,
+        status: emailResult.delivered ? "DELIVERED" : "FAILED",
+        provider: emailResult.provider,
+        providerMessageId: emailResult.providerMessageId,
+        error: emailResult.error,
+      },
+      seats: {
+        maxAdditionalSeats,
+        totalUsed: totalUsed + 1,
+        availableSeats: Math.max(0, maxAdditionalSeats - (totalUsed + 1)),
+      },
     },
-    201,
+    201
   );
+}
+
+/**
+ * Revoke a pending invitation (Admin only).
+ * Frees up the consumed seat immediately.
+ */
+export async function DELETE(request: Request): Promise<Response> {
+  const session = await getSession();
+  if (!session) return json({ error: "Unauthorized" }, 401);
+  if (session.role !== "ADMIN") return json({ error: "Forbidden" }, 403);
+
+  const url = new URL(request.url);
+  let id = url.searchParams.get("id");
+
+  if (!id) {
+    try {
+      const body = await request.json();
+      id = typeof body.id === "string" ? body.id : null;
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!id) {
+    return json({ error: "Invitation ID is required" }, 400);
+  }
+
+  const invitation = await prisma.invitation.findFirst({
+    where: { id, organizationId: session.organizationId, status: "PENDING" },
+  });
+
+  if (!invitation) {
+    return json({ error: "Pending invitation not found" }, 404);
+  }
+
+  await prisma.invitation.update({
+    where: { id },
+    data: { status: "REVOKED" },
+  });
+
+  await writeAuditLog({
+    organizationId: session.organizationId,
+    userId: session.userId,
+    action: "INVITATION_REVOKED",
+    entityType: "Invitation",
+    entityId: id,
+    metadata: { email: invitation.email },
+  }).catch(() => {});
+
+  return json({ ok: true, revokedId: id });
 }
