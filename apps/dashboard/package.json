@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "prebuild": "pnpm --filter @rf-intelligence/db db:generate",
+    "db:generate": "pnpm --filter @rf-intelligence/db db:generate",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -12,6 +13,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "inngest:dev": "inngest-cli dev -u http://127.0.0.1:3000/api/inngest"
+  },
+  "prisma": {
+    "schema": "../../packages/db/prisma/schema.prisma"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1135.0",
@@ -32,6 +36,7 @@
     "inngest": "^4.20.0",
     "lucide-react": "^1.33.0",
     "next": "16.3.2",
+    "nodemailer": "^9.0.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "^10.1.0",
@@ -47,6 +52,7 @@
     "@next/bundle-analyzer": "^16.3.5",
     "@tailwindcss/postcss": "4",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

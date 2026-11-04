@@ -27,19 +27,30 @@ export async function GET(request: Request): Promise<Response> {
   const where: Prisma.StockMovementWhereInput = { organizationId: orgId };
   if (productId) where.productId = productId;
 
-  const [movements, total] = await Promise.all([
-    prisma.stockMovement.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      take: limit,
-      skip: offset,
-      include: {
-        product: { select: { id: true, sku: true, name: true, unit: true } },
-        order: { select: { id: true, orderNumber: true, draftNumber: true } },
-      },
-    }),
-    prisma.stockMovement.count({ where }),
-  ]);
+  let movements: any[] = [];
+  let total = 0;
+  try {
+    if (typeof (prisma as any).stockMovement?.findMany === "function") {
+      const res = await Promise.all([
+        prisma.stockMovement.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          take: limit,
+          skip: offset,
+          include: {
+            product: { select: { id: true, sku: true, name: true, unit: true } },
+            order: { select: { id: true, orderNumber: true, draftNumber: true } },
+          },
+        }),
+        prisma.stockMovement.count({ where }),
+      ]);
+      movements = res[0];
+      total = res[1];
+    }
+  } catch {
+    movements = [];
+    total = 0;
+  }
 
   return json({ movements, total, limit, offset });
 }

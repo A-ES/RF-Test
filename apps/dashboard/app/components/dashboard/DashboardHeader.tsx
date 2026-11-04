@@ -7,6 +7,8 @@ interface DashboardHeaderProps {
   activeProjectsCount: number;
   alertsCount: number;
   unreadInsightCount: number;
+  organizationName?: string;
+  businessType?: string;
 }
 
 export function DashboardHeader({
@@ -14,6 +16,8 @@ export function DashboardHeader({
   activeProjectsCount,
   alertsCount,
   unreadInsightCount,
+  organizationName,
+  businessType,
 }: DashboardHeaderProps) {
   // Client-only state for time-aware greeting and date to avoid hydration mismatches
   const [mounted, setMounted] = React.useState(false);
@@ -57,7 +61,21 @@ export function DashboardHeader({
       <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           {/* Eyebrow */}
-          <p className="dash-eyebrow mb-2">/ OVERVIEW</p>
+          <div className="flex items-center gap-2 mb-2 font-mono text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+            <span>/ OVERVIEW</span>
+            {organizationName && (
+              <>
+                <span>&bull;</span>
+                <span className="text-white font-medium">{organizationName}</span>
+              </>
+            )}
+            {businessType && (
+              <>
+                <span>&bull;</span>
+                <span className="text-[#F24E4B]">{businessType}</span>
+              </>
+            )}
+          </div>
 
           {/* Large Greeting with red-to-orange gradient and subtle animated shine */}
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-[var(--text-primary)]">

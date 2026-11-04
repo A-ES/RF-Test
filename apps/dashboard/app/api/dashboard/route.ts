@@ -707,6 +707,7 @@ export async function GET(): Promise<Response> {
       insightDatesRes,
       conversationDatesRes,
       failedDocsRes,
+      orgInfoRes,
     ] = await Promise.allSettled([
       fetchAggregatedCounts(orgId, now),
       prisma.project.findMany({
@@ -788,6 +789,23 @@ export async function GET(): Promise<Response> {
         take:    3,
         select:  { id: true, fileName: true, failureReason: true, projectId: true },
       }),
+      prisma.organization.findUnique({
+        where: { id: orgId },
+        select: {
+          name: true,
+          onboarding: {
+            select: {
+              companyName: true,
+              businessType: true,
+              operationalActivities: true,
+              challenges: true,
+              monitoringAreas: true,
+              alertPreferences: true,
+              priorities: true,
+            },
+          },
+        },
+      }),
     ]);
 
     const countsData = aggregatedCountsRes.status === "fulfilled" ? aggregatedCountsRes.value : null;
@@ -855,8 +873,45 @@ export async function GET(): Promise<Response> {
       },
     };
 
+    // Parse organization personalization from onboarding
+    const orgRecord = orgInfoRes?.status === "fulfilled" ? orgInfoRes.value : null;
+    const organizationName =
+      orgRecord?.onboarding?.companyName ||
+      orgRecord?.name ||
+      session.organization?.name ||
+      "Workspace";
+    const businessType = orgRecord?.onboarding?.businessType || "Wholesale & Distribution";
+
+    let operationalProfile: DashboardData["operationalProfile"] = undefined;
+    if (orgRecord?.onboarding) {
+      try {
+        operationalProfile = {
+          activities: orgRecord.onboarding.operationalActivities
+            ? JSON.parse(orgRecord.onboarding.operationalActivities)
+            : [],
+          challenges: orgRecord.onboarding.challenges
+            ? JSON.parse(orgRecord.onboarding.challenges)
+            : [],
+          monitoringAreas: orgRecord.onboarding.monitoringAreas
+            ? JSON.parse(orgRecord.onboarding.monitoringAreas)
+            : [],
+          alertPreferences: orgRecord.onboarding.alertPreferences
+            ? JSON.parse(orgRecord.onboarding.alertPreferences)
+            : [],
+          priorities: orgRecord.onboarding.priorities
+            ? JSON.parse(orgRecord.onboarding.priorities)
+            : [],
+        };
+      } catch {
+        operationalProfile = undefined;
+      }
+    }
+
     const payload: DashboardData = {
       userName:           session.name || "there",
+      organizationName,
+      businessType,
+      operationalProfile,
       metricCards,
       projects:           rawProjects.slice(0, 5).map((p) => serializeProject(p as ProjectRow)),
       projectStatusCounts: countsData?.projectStatusCounts,

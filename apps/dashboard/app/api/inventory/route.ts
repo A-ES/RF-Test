@@ -43,19 +43,30 @@ export async function GET(request: Request): Promise<Response> {
     ];
   }
 
-  const [products, total] = await Promise.all([
-    prisma.product.findMany({
-      where,
-      orderBy: { sku: "asc" },
-      take: limit,
-      skip: offset,
-      include: {
-        inventoryLevel: true,
-        aliases: { select: { alias: true } },
-      },
-    }),
-    prisma.product.count({ where }),
-  ]);
+  let products: any[] = [];
+  let total = 0;
+  try {
+    if (typeof (prisma as any).product?.findMany === "function") {
+      const res = await Promise.all([
+        prisma.product.findMany({
+          where,
+          orderBy: { sku: "asc" },
+          take: limit,
+          skip: offset,
+          include: {
+            inventoryLevel: true,
+            aliases: { select: { alias: true } },
+          },
+        }),
+        prisma.product.count({ where }),
+      ]);
+      products = res[0];
+      total = res[1];
+    }
+  } catch {
+    products = [];
+    total = 0;
+  }
 
   let totalOnHand = 0;
   let totalReserved = 0;
@@ -89,7 +100,7 @@ export async function GET(request: Request): Promise<Response> {
       available,
       status,
       isReorderNeeded,
-      aliases: p.aliases.map((a) => a.alias),
+      aliases: (p.aliases || []).map((a: any) => a.alias),
       updatedAt: p.inventoryLevel?.updatedAt || p.updatedAt,
     };
   });

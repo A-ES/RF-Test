@@ -9,7 +9,7 @@ export interface NormalizedInboundMessage {
   channel: CustomerConversationChannel;
   /**
    * Inbox that maps 1:1 onto an organization. WhatsApp: Meta
-   * `metadata.phone_number_id`. Email (later): destination mailbox.
+   * `metadata.phone_number_id`. Email: destination mailbox.
    */
   inboxIdentifier: string;
   /** Customer contact id. WhatsApp: sender MSISDN. Email: From address. */
@@ -19,6 +19,9 @@ export interface NormalizedInboundMessage {
   attachmentsJson?: string;
   transcript?: string;
   providerMessageId?: string;
+  emailSubject?: string;
+  emailHeadersJson?: string;
+  status?: string;
   receivedAt: Date;
 }
 
@@ -27,6 +30,8 @@ export interface OutboundMessage {
   contactIdentifier: string;
   body: string;
   mediaUrl?: string;
+  emailSubject?: string;
+  emailHeaders?: Record<string, string>;
 }
 
 export interface MessagingProvider {

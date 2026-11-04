@@ -27,6 +27,7 @@ export async function GET(): Promise<Response> {
       name: true,
       email: true,
       role: true,
+      jobTitle: true,
       avatarInitials: true,
       createdAt: true,
     },

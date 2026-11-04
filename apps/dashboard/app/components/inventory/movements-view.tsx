@@ -88,7 +88,7 @@ export function StockMovementsView() {
             placeholder="Search movements by SKU, product name, or reason..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]"
+            className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]"
           />
         </div>
 
@@ -116,7 +116,7 @@ export function StockMovementsView() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-muted)] font-medium">
+              <tr className="border-b border-[var(--border)] bg-[var(--surface-elevated)] font-mono text-[10px] uppercase tracking-wider text-[var(--text-muted)] select-none">
                 <th className="py-3 px-4">Timestamp</th>
                 <th className="py-3 px-4">SKU</th>
                 <th className="py-3 px-4">Product Name</th>

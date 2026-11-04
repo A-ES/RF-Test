@@ -81,6 +81,41 @@ export async function POST(request: Request): Promise<Response> {
 
     await setSessionCookie(user.id);
 
-    return Response.json({ ok: true });
+    // Compute post-login destination based on subscription & onboarding status
+    const { getOrganizationOnboardingStatus } = await import("@/app/lib/payment/service");
+    const status = await getOrganizationOnboardingStatus(user.organizationId);
+
+    let redirectTo = "/dashboard";
+    if (status.completed) {
+      redirectTo = "/dashboard";
+    } else if (!status.hasActiveSubscription) {
+      redirectTo = "/onboarding/plan";
+    } else {
+      switch (status.currentStep) {
+        case 1:
+          redirectTo = "/onboarding/plan";
+          break;
+        case 2:
+          redirectTo = "/onboarding/checkout";
+          break;
+        case 3:
+          redirectTo = "/onboarding/identity";
+          break;
+        case 4:
+          redirectTo = "/onboarding/business";
+          break;
+        case 5:
+          redirectTo = "/onboarding/team";
+          break;
+        case 6:
+          redirectTo = "/onboarding/presentation";
+          break;
+        default:
+          redirectTo = "/dashboard";
+          break;
+      }
+    }
+
+    return Response.json({ ok: true, redirectTo });
   });
 }

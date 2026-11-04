@@ -8,6 +8,13 @@ const h = vi.hoisted(() => {
   const userUpdate = vi.fn(async () => ({}));
   const userFindUnique = vi.fn();
   const orgFindFirst = vi.fn(async () => ({ id: "org_default" }));
+  const orgFindUnique = vi.fn(async () => ({
+    id: "org_default",
+    name: "Acme",
+    plan: "Enterprise",
+    subscriptions: [{ status: "ACTIVE", plan: { name: "Enterprise", slug: "enterprise" } }],
+    onboarding: { completed: true, currentStep: 6 },
+  }));
 
   return {
     auditCreate,
@@ -15,6 +22,7 @@ const h = vi.hoisted(() => {
     userUpdate,
     userFindUnique,
     orgFindFirst,
+    orgFindUnique,
     prisma: {
       user: {
         findUnique: userFindUnique,
@@ -22,6 +30,7 @@ const h = vi.hoisted(() => {
       },
       organization: {
         findFirst: orgFindFirst,
+        findUnique: orgFindUnique,
       },
       auditLog: {
         create: auditCreate,
